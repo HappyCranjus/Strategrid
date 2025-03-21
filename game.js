@@ -1671,8 +1671,33 @@ function drawTroops() {
     ctx.lineWidth = 1;
     ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
     ctx.fillStyle = "#fff";
-    ctx.font = "8px sans-serif";
+    ctx.font = "9px sans-serif";
     ctx.fillText(troop.hp, startX - shapeSize, startY + shapeSize + 8);
+    if (troop.armorCurrent !== undefined) {
+      const armorBarWidth = tileSize * 0.8,
+        armorBarHeight = 4;
+      const armorBarX = startX - armorBarWidth / 2,
+        armorBarY = startY + shapeSize - 2;
+      const armorRatio = troop.armorCurrent / troop.armorBreakPoint;
+      ctx.fillStyle = "grey";
+      ctx.fillRect(
+        armorBarX,
+        armorBarY,
+        armorBarWidth * armorRatio,
+        armorBarHeight
+      );
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(armorBarX, armorBarY, armorBarWidth, armorBarHeight);
+      ctx.fillStyle = "#fff";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(
+        troop.armorCurrent,
+        startX - shapeSize - 1,
+        startY + shapeSize + 0
+      );
+    }
+
     if (!troop.active && troop.maxActivationTime > 0) {
       const barWidth = tileSize * 0.8,
         barHeight = 4;
@@ -1687,6 +1712,7 @@ function drawTroops() {
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barWidth, barHeight);
     }
+
     if (troop.target && !troop.target.dead) {
       const targetX = troop.target.col * tileSize + tileSize / 2;
       const targetY = troop.target.row * tileSize + tileSize / 2;
@@ -1701,21 +1727,6 @@ function drawTroops() {
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);
-    }
-    if (troop.attackAnimTimer > 0 && troop.lastAttackTargetX !== undefined) {
-      ctx.beginPath();
-      let flashRadius = 10;
-      ctx.arc(
-        troop.lastAttackTargetX,
-        troop.lastAttackTargetY,
-        flashRadius,
-        0,
-        2 * Math.PI
-      );
-      ctx.fillStyle = "orange";
-      ctx.globalAlpha = troop.attackAnimTimer / 0.2;
-      ctx.fill();
-      ctx.globalAlpha = 1;
     }
   }
 }
