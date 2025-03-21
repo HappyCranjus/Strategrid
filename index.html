@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Strategrid - Landing</title>
+    <style>
+      /* Basic reset and styling */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body,
+      html {
+        width: 100%;
+        height: 100%;
+        background-color: #111; /* Dark background */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: sans-serif;
+        color: #eee;
+      }
+      #splashContainer {
+        text-align: center;
+      }
+      .hidden {
+        display: none;
+      }
+      .splashText {
+        margin: 10px 0;
+        font-weight: normal;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 1rem;
+        cursor: pointer;
+        background-color: #4caf50;
+        border: none;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splashContainer">
+      <!-- These elements start out hidden via JavaScript or immediate styling -->
+      <h1 id="loadingText" class="splashText hidden">
+        Loading Strategrid v0.1...
+      </h1>
+      <h2 id="productionText" class="splashText hidden">
+        A HappyCranjus Production
+      </h2>
+      <h2 id="titleText" class="splashText hidden">
+        Strategrid: Humble Beginnings
+      </h2>
+      <button id="launchButton" class="hidden">Launch Strategrid v0.1</button>
+    </div>
+
+    <script>
+      window.addEventListener("load", () => {
+        const loadingText = document.getElementById("loadingText");
+        const productionText = document.getElementById("productionText");
+        const titleText = document.getElementById("titleText");
+        const launchButton = document.getElementById("launchButton");
+
+        // Show "Loading Strategrid v0.1..." for 2 seconds
+        loadingText.classList.remove("hidden");
+        setTimeout(() => {
+          loadingText.classList.add("hidden");
+
+          // Now show "A HappyCranjus Production" for 2 seconds
+          productionText.classList.remove("hidden");
+          setTimeout(() => {
+            productionText.classList.add("hidden");
+
+            // Finally, show "Strategrid: Humble Beginnings" and the button (stays visible)
+            titleText.classList.remove("hidden");
+            launchButton.classList.remove("hidden");
+          }, 2000);
+        }, 2000);
+
+        // When user clicks "Launch", go to your game page (index.html)
+        launchButton.addEventListener("click", () => {
+          window.location.href = "menu.html";
+        });
+      });
+    </script>
+  </body>
+</html>

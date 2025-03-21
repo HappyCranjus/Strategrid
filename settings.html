@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Strategrid Settings</title>
+    <style>
+      body {
+        background: #111;
+        color: #eee;
+        font-family: sans-serif;
+        margin: 0;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 10px;
+      }
+      .return-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 8px 12px;
+        background-color: #444;
+        color: #eee;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .return-btn:hover {
+        background-color: #555;
+      }
+      .section {
+        margin-bottom: 20px;
+        max-width: 400px;
+        margin: 20px auto;
+      }
+      label {
+        display: block;
+        margin: 10px 0 4px;
+      }
+      .slider-value {
+        margin-left: 8px;
+        font-weight: bold;
+      }
+      .checkbox-label {
+        display: inline-block;
+        margin-left: 6px;
+        vertical-align: middle;
+      }
+      fieldset {
+        border: 1px solid #444;
+        padding: 10px;
+      }
+      legend {
+        font-weight: bold;
+        padding: 0 6px;
+      }
+      .placeholder-text {
+        color: #bbb;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <button class="return-btn" id="btnReturnToMenu">Return to Menu</button>
+
+    <h1>Settings</h1>
+
+    <div class="section">
+      <fieldset>
+        <legend>Audio</legend>
+        <!-- Master Volume Slider -->
+        <label for="masterVolume">Master Volume:</label>
+        <input
+          type="range"
+          id="masterVolume"
+          min="0"
+          max="100"
+          value="50"
+          step="1"
+        />
+        <span id="volumeValue" class="slider-value">50</span>
+
+        <!-- SFX Toggle -->
+        <div style="margin-top: 10px">
+          <input type="checkbox" id="sfxToggle" checked />
+          <label for="sfxToggle" class="checkbox-label">SFX On/Off</label>
+        </div>
+
+        <!-- Music Toggle (placeholder) -->
+        <div style="margin-top: 6px">
+          <input type="checkbox" id="musicToggle" />
+          <label for="musicToggle" class="checkbox-label"
+            >Music On/Off (Coming Soon)</label
+          >
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="section">
+      <fieldset>
+        <legend>Keybinds</legend>
+        <p class="placeholder-text">Currently Unavailable</p>
+      </fieldset>
+    </div>
+
+    <script>
+      // Return to Menu
+      document
+        .getElementById("btnReturnToMenu")
+        .addEventListener("click", () => {
+          window.location.href = "menu.html";
+        });
+
+      const masterVolumeSlider = document.getElementById("masterVolume");
+      const volumeValueSpan = document.getElementById("volumeValue");
+      const sfxToggle = document.getElementById("sfxToggle");
+      const musicToggle = document.getElementById("musicToggle");
+
+      // Load any previously saved settings from localStorage
+      window.addEventListener("DOMContentLoaded", () => {
+        const savedVolume = localStorage.getItem("strategrid_masterVolume");
+        const savedSfx = localStorage.getItem("strategrid_sfxEnabled");
+        const savedMusic = localStorage.getItem("strategrid_musicEnabled");
+
+        if (savedVolume !== null) {
+          masterVolumeSlider.value = savedVolume;
+          volumeValueSpan.textContent = savedVolume;
+        }
+        if (savedSfx !== null) {
+          sfxToggle.checked = savedSfx === "true";
+        }
+        if (savedMusic !== null) {
+          musicToggle.checked = savedMusic === "true";
+        }
+      });
+
+      // Save volume changes
+      masterVolumeSlider.addEventListener("input", () => {
+        volumeValueSpan.textContent = masterVolumeSlider.value;
+        localStorage.setItem(
+          "strategrid_masterVolume",
+          masterVolumeSlider.value
+        );
+      });
+
+      // Save SFX toggle changes
+      sfxToggle.addEventListener("change", () => {
+        localStorage.setItem(
+          "strategrid_sfxEnabled",
+          sfxToggle.checked ? "true" : "false"
+        );
+      });
+
+      // Save Music toggle changes (placeholder)
+      musicToggle.addEventListener("change", () => {
+        localStorage.setItem(
+          "strategrid_musicEnabled",
+          musicToggle.checked ? "true" : "false"
+        );
+      });
+    </script>
+  </body>
+</html>
