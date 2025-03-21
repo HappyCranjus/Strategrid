@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Strategrid - Main Menu</title>
+    <style>
+      /* Basic resets & layout */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body,
+      html {
+        width: 100%;
+        height: 100%;
+        background-color: #111;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-family: sans-serif;
+        color: #eee;
+      }
+      h1 {
+        font-size: 2rem;
+        margin-bottom: 20px;
+      }
+      h2 {
+        margin-bottom: 30px;
+        font-weight: normal;
+        color: #bbb;
+      }
+      .menu-btn {
+        display: block;
+        margin: 10px 0;
+        padding: 12px 24px;
+        font-size: 1rem;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        background: #444;
+        color: #eee;
+        transition: background-color 0.2s ease;
+      }
+      .menu-btn:hover {
+        background: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Strategrid: Humble Beginnings</h1>
+    <h2>v0.1 - Main Menu</h2>
+
+    <button class="menu-btn" id="btnPvP">2 Player Hotseat (PvP)</button>
+    <button class="menu-btn" id="btnAI">Play vs Computer (Coming Soon!)</button>
+    <button class="menu-btn" id="btnStory">Story Mode (Coming Soon-ish)</button>
+    <button class="menu-btn" id="btnSettings">Settings</button>
+    <button class="menu-btn" id="btnHelp">Help</button>
+    <button class="menu-btn" id="btnRoadmap">Development Roadmap</button>
+    <button class="menu-btn" id="btnContact">
+      Report Bugs and Offer Feedback: happycranjus@gmail.com
+    </button>
+
+    <script>
+      // Navigate to the game page
+      document.getElementById("btnPvP").addEventListener("click", () => {
+        window.location.href = "game.html";
+      });
+      // Coming soon placeholders
+      document.getElementById("btnAI").addEventListener("click", () => {
+        alert("AI mode coming soon!");
+      });
+      document.getElementById("btnStory").addEventListener("click", () => {
+        alert("Story mode coming soon!");
+      });
+      // Settings navigation
+      document.getElementById("btnSettings").addEventListener("click", () => {
+        window.location.href = "settings.html";
+      });
+      // Help navigation
+      document.getElementById("btnHelp").addEventListener("click", () => {
+        window.location.href = "help.html";
+      });
+      // Roadmap now navigates to the new roadmap page
+      document.getElementById("btnRoadmap").addEventListener("click", () => {
+        window.location.href = "roadmap.html";
+      });
+      // Contact button now opens the mail client
+      document.getElementById("btnContact").addEventListener("click", () => {
+        window.location.href = "mailto:happycranjus@gmail.com";
+      });
+    </script>
+  </body>
+</html>
