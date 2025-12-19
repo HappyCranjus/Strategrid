@@ -1,0 +1,20 @@
+{
+  "name": "troops-and-tactics",
+  "version": "1.0.0",
+  "description": "A strategy game with troops and tactics",
+  "main": "game.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFiles": [
+      "./tests/setup.js"
+    ]
+  }
+}
