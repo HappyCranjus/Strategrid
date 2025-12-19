@@ -1,0 +1,13 @@
+#!/bin/bash
+echo "Starting game server for mobile access..."
+echo ""
+echo "Make sure your phone is on the same Wi-Fi network!"
+echo ""
+echo "Finding your local IP address..."
+ifconfig | grep "inet " | grep -v 127.0.0.1
+echo ""
+echo "Starting server on port 8000..."
+echo "Access from phone: http://YOUR_IP:8000/game.html"
+echo ""
+python3 -m http.server 8000 --bind 0.0.0.0
+

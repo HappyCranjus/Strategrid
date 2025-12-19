@@ -1,0 +1,746 @@
+body {
+  background-color: #222;
+  color: #eee;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 10px;
+  overflow-x: hidden;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* Flex container for three columns */
+#main-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+#player1-controls,
+#player2-controls {
+  width: 160px;
+  min-width: 140px;
+}
+
+#center-controls {
+  flex-grow: 1;
+  text-align: center;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* CPU/Training mode layout */
+#cpu-resources,
+#player-resources {
+  width: 100%;
+  max-width: 700px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+#compact-controls {
+  width: 100%;
+  max-width: 700px;
+}
+
+.compact-controls-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: center;
+}
+
+.compact-section {
+  /* Remove background and padding - no separators */
+  padding: 0;
+  background: transparent;
+}
+
+.compact-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.compact-buttons button {
+  font-size: 10px;
+  padding: 4px 8px;
+  margin: 0;
+  min-height: 28px;
+  flex: 0 1 auto;
+  min-width: 70px;
+  max-width: 100px;
+}
+
+/* Color code buttons by type */
+#compact-troop-buttons button {
+  background-color: #dc3545; /* Red */
+  color: #fff;
+  border: 1px solid #c82333;
+}
+
+#compact-building-buttons button {
+  background-color: #8b4513; /* Brown */
+  color: #fff;
+  border: 1px solid #6b3410;
+}
+
+#compact-strategem-buttons button {
+  background-color: #4169e1; /* Royal Blue */
+  color: #fff;
+  border: 1px solid #2e4fc7;
+}
+
+/* Deck Building UI Styles */
+.deck-selection-btn {
+  padding: 8px 12px;
+  margin: 2px;
+  background-color: #444;
+  color: #eee;
+  border: 2px solid #666;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+.deck-selection-btn:hover {
+  background-color: #555;
+  border-color: #888;
+}
+
+.deck-selection-btn:active {
+  background-color: #666;
+  transform: scale(0.95);
+}
+
+.deck-selection-btn.selected {
+  background-color: #4caf50;
+  border-color: #4caf50;
+  color: #fff;
+  font-weight: bold;
+}
+
+.deck-selection-btn.selected:active {
+  background-color: #45a049;
+}
+
+.deck-selection-btn.locked {
+  background-color: #333;
+  border-color: #555;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+#deckBuildingSection h3 {
+  color: #fff;
+  font-size: 18px;
+}
+
+#deckBuildingSection h4 {
+  color: #ccc;
+  font-size: 14px;
+}
+
+#deckSaveStatus {
+  color: #4caf50;
+  font-weight: bold;
+}
+
+/* Mobile styles for deck building */
+@media screen and (max-width: 768px) {
+  #deckBuildingSection {
+    padding: 12px;
+    margin-bottom: 10px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: visible;
+  }
+
+  #deckBuildingSection h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+
+  #deckBuildingSection h4 {
+    font-size: 13px;
+    margin: 8px 0 6px 0;
+  }
+
+  .deck-selection-btn {
+    padding: 12px 10px;
+    margin: 4px 2px;
+    font-size: 13px;
+    min-height: 44px; /* iOS recommended tap target size */
+    min-width: calc(50% - 8px); /* Two buttons per row with gap */
+    max-width: calc(50% - 8px);
+    flex: 0 0 calc(50% - 8px); /* Fixed size, no grow/shrink */
+    box-sizing: border-box;
+  }
+
+  /* For 6 troops, show 2 per row (3 rows) */
+  #deckTroopsSelection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    overflow-x: visible;
+  }
+
+  /* For 2 buildings, show side by side */
+  #deckBuildingsSelection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    overflow-x: visible;
+  }
+
+  /* For 3 strategems, show 2 per row */
+  #deckStrategemsSelection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    overflow-x: visible;
+  }
+
+  #deckSaveStatus {
+    font-size: 14px;
+  }
+
+  #saveDeckBtn {
+    padding: 12px 20px;
+    font-size: 16px;
+    min-height: 44px;
+    width: 100%;
+    margin-top: 15px;
+  }
+}
+
+/* Prevent text selection on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile responsive layout */
+@media screen and (max-width: 768px) {
+  body {
+    padding: 5px;
+  }
+  #main-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #player1-controls,
+  #player2-controls {
+    width: 100%;
+    max-width: 100%;
+    order: 2;
+  }
+
+  #center-controls {
+    order: 1;
+    width: 100%;
+    min-width: 100%;
+  }
+
+  #player2-controls {
+    order: 3;
+  }
+
+  /* Ensure compact layout is properly displayed on mobile */
+  #cpu-resources,
+  #player-resources {
+    width: 100%;
+    max-width: 100%;
+    margin: 5px 0;
+    padding: 8px;
+  }
+
+  #compact-controls {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .compact-controls-grid {
+    gap: 6px;
+  }
+
+  .compact-section {
+    width: auto;
+  }
+
+  .compact-buttons {
+    justify-content: center;
+  }
+
+  .compact-buttons button {
+    min-width: 65px;
+    max-width: 90px;
+    font-size: 9px;
+    padding: 4px 6px;
+    min-height: 26px;
+  }
+
+  /* Hide phase display on mobile in training mode to save space */
+  #phaseDisplayContainer {
+    margin-bottom: 5px;
+  }
+
+  #phaseDisplay {
+    font-size: 16px;
+  }
+
+  canvas {
+    max-width: 100%;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 700 / 600;
+  }
+
+  button {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 44px; /* iOS recommended tap target size */
+    touch-action: manipulation;
+  }
+
+  .troop-controls,
+  .building-controls,
+  .strategem-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 5px;
+  }
+
+  .troop-controls button,
+  .building-controls button,
+  .strategem-controls button {
+    width: 100%;
+    margin: 2px;
+    font-size: 14px;
+    padding: 10px 8px;
+  }
+
+  .progress-bar {
+    width: 100%;
+  }
+
+  #player1-controls h2,
+  #player2-controls h2 {
+    font-size: 18px;
+    margin: 5px 0;
+  }
+
+  .progress-text {
+    font-size: 14px;
+  }
+
+  #phaseDisplay {
+    font-size: 18px;
+  }
+
+  #modeSelection,
+  #trainModeSelection,
+  #storyModeSelection {
+    padding: 10px;
+  }
+
+  /* Hide phase display container on mobile in CPU/Training modes to save space */
+  #phaseDisplayContainer {
+    margin-bottom: 5px;
+  }
+
+  #phaseDisplay {
+    font-size: 16px;
+  }
+
+  #modeSelection select,
+  #modeSelection button,
+  #trainModeSelection input,
+  #trainModeSelection button {
+    font-size: 16px;
+    padding: 10px;
+    min-height: 44px;
+  }
+
+  /* Make tooltips smaller on mobile */
+  .tooltip-box {
+    max-width: 250px;
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+
+  /* Stack controls vertically on very small screens */
+  @media screen and (max-width: 480px) {
+    .troop-controls,
+    .building-controls,
+    .strategem-controls {
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    }
+
+    .troop-controls button,
+    .building-controls button,
+    .strategem-controls button {
+      font-size: 12px;
+      padding: 8px 6px;
+    }
+  }
+}
+
+/* Section headers for controls */
+.troop-controls,
+.building-controls {
+  margin-bottom: 10px;
+}
+
+/* Tooltip styling */
+.tooltip-box {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #555;
+  pointer-events: none; /* Let mouse events pass through */
+  z-index: 9999;
+  display: none; /* Hidden by default */
+  max-width: 300px;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.tooltip-box strong {
+  color: #4caf50;
+}
+
+.troop-controls h3,
+.building-controls h3 {
+  font-size: 18px;
+  margin-bottom: 5px;
+  text-decoration: underline;
+}
+
+/* Phase display container */
+#phaseDisplayContainer {
+  margin-bottom: 10px;
+}
+
+canvas {
+  background-color: #111;
+  border: 2px solid #555;
+  display: block;
+  margin: 0 auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  margin: 5px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+button:disabled {
+  background-color: #555;
+  color: #999;
+}
+
+/* Troop spawn button color-coding */
+button.spawn-btn {
+  background-color: #4caf50;
+  color: #fff;
+}
+button.spawn-btn-swordsman {
+  background-color: #aa6911;
+  color: #fff;
+}
+button.spawn-btn-archer {
+  background-color: #2196f3;
+  color: #fff;
+}
+button.spawn-btn-heavy {
+  background-color: #aa69;
+  color: #fff;
+}
+button.spawn-btn-dasher {
+  background-color: #bb33bb;
+  color: #fff;
+}
+button.spawn-btn-settler {
+  background-color: #4fad1c;
+  color: #fff;
+}
+button.spawn-btn-sentinel {
+  background-color: #8b4513; /* Saddle brown color for Sentinel */
+  color: #fff;
+}
+
+/* Building button color-coding */
+button.build-btn-wall {
+  background-color: #888; /* Grey for walls */
+  color: #fff;
+}
+button.build-btn-farm {
+  background-color: #6b8e23; /* Olive/green for farms */
+  color: #fff;
+}
+button.build-btn-archertower {
+  background-color: #8a2be2; /* Blue-violet for archer towers */
+  color: #fff;
+}
+button.build-btn-warCamp {
+  background-color: #b22222; /* Firebrick for war camps */
+  color: #fff;
+}
+
+/* Skip turn and march buttons */
+button.skip-btn {
+  background-color: #f44336;
+  color: #fff;
+}
+
+button.march-btn {
+  background-color: #2196f3;
+  color: #fff;
+}
+
+/* Progress bar styling */
+.progress-bar {
+  width: 160px;
+  height: 10px;
+  background: #444;
+  margin: 3px auto;
+  border: 1px solid #666;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #0f0;
+  width: 0%;
+}
+
+/* Resource bars with grid marks and colors */
+.resource-bar-rp {
+  background: #333;
+  border: 1px solid #555;
+}
+
+.resource-bar-tp {
+  background: #333;
+  border: 1px solid #555;
+}
+
+/* RP bar color - Cerulean */
+.rp-fill {
+  background: #00ced1; /* Cerulean */
+}
+
+/* TP bar color - Magenta */
+.tp-fill {
+  background: #ff00ff; /* Magenta */
+}
+
+/* Grid marks for RP bars (cap at 10, so marks at 10%, 20%, 30%, etc.) */
+.resource-bar-rp::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.3) 1px,
+    transparent 1px
+  );
+  background-size: 10% 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Grid marks for TP bars (display max 20, so marks at 5%, 10%, 15%, etc.) */
+.resource-bar-tp::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.3) 1px,
+    transparent 1px
+  );
+  background-size: 5% 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ensure fill bars are above grid marks */
+.resource-bar-rp .rp-fill,
+.resource-bar-tp .tp-fill {
+  position: relative;
+  z-index: 2;
+}
+
+.progress-text {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.combat-tp-text {
+  font-size: 12px;
+  margin-bottom: 10px;
+  color: #ffd700;
+  font-weight: bold;
+  text-align: center;
+}
+
+/* Phase display styling */
+#phaseDisplay {
+  font-size: 24px;
+  color: #ff0;
+}
+
+/* Mode feedback displays */
+#spawnModeDisplay {
+  color: #0f0;
+  font-weight: bold;
+  margin-top: 10px;
+}
+#strategemP1Heal,
+#strategemP2Heal {
+  background-color: #6b8e23; /* Olive/green for heal strategem */
+  color: #fff;
+}
+
+#strategemP1DivineWind,
+#strategemP2DivineWind {
+  background-color: #2196f3;
+  color: #fff;
+}
+
+#strategemP1BoltStorm,
+#strategemP2BoltStorm {
+  background-color: #8a2be2; /* Blue-violet for bolt storm */
+  color: #fff;
+}
+
+#planModeDisplay {
+  color: #0ff;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+#buildModeDisplay {
+  color: #ff0;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+/* Tutorial Overlay Styling */
+#tutorialOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: sans-serif;
+}
+
+#tutorialBox {
+  background: #222;
+  padding: 20px;
+  border-radius: 12px;
+  width: 360px;
+  max-width: 90%;
+  text-align: center;
+  pointer-events: auto;
+}
+
+#tutorialBox h2 {
+  margin-top: 0;
+  font-size: 22px;
+}
+
+.tutorial-buttons button {
+  margin: 10px 5px 0;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tutorial-highlight {
+  outline: 3px solid gold !important;
+  animation: pulse-highlight 1.5s infinite;
+}
+
+@keyframes pulse-highlight {
+  0% {
+    outline-color: gold;
+  }
+  50% {
+    outline-color: white;
+  }
+  100% {
+    outline-color: gold;
+  }
+}
+
+/* Checklist Overlay Panel Styling */
+#checklistPanel {
+  position: absolute;
+  top: 150px;
+  left: 180px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 10px;
+  border-radius: 8px;
+  display: none;
+}
+
+#checklistPanel h3 {
+  color: white;
+  margin-bottom: 10px;
+}
+
+#checklistItems {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#checklistItems li {
+  font-size: 14px;
+  margin-bottom: 4px;
+}

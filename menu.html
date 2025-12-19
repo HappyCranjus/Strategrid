@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Strategrid - Main Menu</title>
+    <style>
+      /* Basic resets & layout */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body,
+      html {
+        width: 100%;
+        height: 100%;
+        background-color: #111;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-family: sans-serif;
+        color: #eee;
+      }
+      h1 {
+        font-size: 2rem;
+        margin-bottom: 20px;
+      }
+      h2 {
+        margin-bottom: 30px;
+        font-weight: normal;
+        color: #bbb;
+      }
+      .menu-btn {
+        display: block;
+        margin: 10px 0;
+        padding: 12px 24px;
+        font-size: 1rem;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        background: #444;
+        color: #eee;
+        transition: background-color 0.2s ease;
+      }
+      .menu-btn:hover {
+        background: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Strategrid</h1>
+    <h2>Choose Game Mode</h2>
+
+    <button class="menu-btn" id="btnPvC">
+      PvC (Player vs Computer)
+    </button>
+    <button class="menu-btn" id="btnPvPRoomCode">
+      PvP (Room Code)
+    </button>
+    <button class="menu-btn" id="btnPvPOpen">
+      PvP (Open Matchmaking)
+    </button>
+
+    <script>
+      // Wait for DOM to be ready
+      document.addEventListener("DOMContentLoaded", () => {
+        console.log("[Menu] DOM loaded, setting up buttons...");
+        
+        // Navigate to PvC mode
+        const btnPvC = document.getElementById("btnPvC");
+        if (btnPvC) {
+          console.log("[Menu] PvC button found");
+          btnPvC.addEventListener("click", (e) => {
+            e.preventDefault();
+            console.log("[Menu] PvC button clicked, navigating to PvC mode");
+            window.location.href = "game.html?mode=pvc";
+          });
+        } else {
+          console.error("[Menu] PvC button not found!");
+        }
+        
+        // Navigate to PvP Room Code mode
+        const btnPvPRoomCode = document.getElementById("btnPvPRoomCode");
+        if (btnPvPRoomCode) {
+          console.log("[Menu] PvP Room Code button found");
+          btnPvPRoomCode.addEventListener("click", (e) => {
+            e.preventDefault();
+            console.log("[Menu] PvP Room Code button clicked, navigating to PvP Room Code mode");
+            window.location.href = "game.html?mode=pvp&type=roomcode";
+          });
+        } else {
+          console.error("[Menu] PvP Room Code button not found!");
+        }
+        
+        // Navigate to PvP Open Matchmaking mode
+        const btnPvPOpen = document.getElementById("btnPvPOpen");
+        if (btnPvPOpen) {
+          console.log("[Menu] PvP Open button found");
+          btnPvPOpen.addEventListener("click", (e) => {
+            e.preventDefault();
+            console.log("[Menu] PvP Open button clicked, navigating to PvP Open mode");
+            window.location.href = "game.html?mode=pvp&type=matchmaking";
+          });
+        } else {
+          console.error("[Menu] PvP Open button not found!");
+        }
+      });
+    </script>
+  </body>
+</html>

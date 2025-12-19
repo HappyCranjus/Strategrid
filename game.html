@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Strategrid - Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="main-container">
+      <!-- Player 1 Controls -->
+      <div id="player1-controls">
+        <h2>Player 1 (Blue)</h2>
+        <div class="progress-text" id="rpText1">RP: 5.0/10 ( +0.25 )</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="rpBar1" style="width: 50%"></div>
+        </div>
+        <div class="progress-text" id="tpText1">TP: 3.0/5 ( +0.1 )</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="tpBar1" style="width: 60%"></div>
+        </div>
+        <div class="combat-tp-text" id="combatTP1"></div>
+
+        <div class="troop-controls">
+          <h3>Troops</h3>
+          <button
+            class="spawn-btn spawn-btn-swordsman"
+            data-troop-type="swordsman"
+            data-owner="player1"
+          >
+            Swordsman (1 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="bannerman"
+            data-owner="player1"
+          >
+            Bannerman (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-archer"
+            data-troop-type="archer"
+            data-owner="player1"
+          >
+            Archer (1.5 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-heavy"
+            data-troop-type="heavy"
+            data-owner="player1"
+          >
+            Heavy (3 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-settler"
+            data-troop-type="settler"
+            data-owner="player1"
+          >
+            Settler (1.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="militia"
+            data-owner="player1"
+          >
+            Militia (0.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="brute"
+            data-owner="player1"
+          >
+            Brute (3 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-sentinel"
+            data-troop-type="sentinel"
+            data-owner="player1"
+          >
+            Sentinel (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="necromancer"
+            data-owner="player1"
+          >
+            Necromancer (3 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="gustKnight"
+            data-owner="player1"
+          >
+            Gust Knight (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="grenadier"
+            data-owner="player1"
+          >
+            Grenadier (2 RP)
+          </button>
+        </div>
+
+        <div class="building-controls">
+          <h3>Buildings</h3>
+          <button
+            class="build-btn build-btn-wall"
+            data-building-type="wall"
+            data-owner="player1"
+          >
+            Wall (1 RP)
+          </button>
+          <button
+            class="build-btn build-btn-farm"
+            data-building-type="farm"
+            data-owner="player1"
+          >
+            Farm (2.5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-archertower"
+            data-building-type="archerTower"
+            data-owner="player1"
+          >
+            Archer Tower (8 RP)
+          </button>
+          <button
+            class="build-btn build-btn-sniperoutpost"
+            data-building-type="sniperOutpost"
+            data-owner="player1"
+          >
+            Sniper Outpost (3 RP)
+          </button>
+          <button
+            class="build-btn build-btn-warCamp"
+            data-building-type="warCamp"
+            data-owner="player1"
+          >
+            War Camp (5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-missilesilo"
+            data-building-type="missileSilo"
+            data-owner="player1"
+          >
+            Missile Silo (4 RP)
+          </button>
+          <button
+            class="build-btn build-btn-supplydepot"
+            data-building-type="supplyDepot"
+            data-owner="player1"
+          >
+            Supply Depot (2.5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-warbonesfactory"
+            data-building-type="warBonesFactory"
+            data-owner="player1"
+          >
+            War Bones Factory (5 RP)
+          </button>
+        </div>
+
+        <div class="strategem-controls">
+          <h3>Strategems</h3>
+          <button
+            id="strategemP1Heal"
+            data-strategem-type="heal"
+            data-owner="player1"
+          >
+            Heal (2 TP)
+          </button>
+          <button
+            id="strategemP1DivineWind"
+            data-strategem-type="divineWind"
+            data-owner="player1"
+          >
+            Divine Wind (3.5 TP)
+          </button>
+          <button
+            id="strategemP1BoltStorm"
+            data-strategem-type="boltStorm"
+            data-owner="player1"
+          >
+            Bolt Storm (3 TP)
+          </button>
+          <button
+            id="strategemP1Blizzard"
+            data-strategem-type="blizzard"
+            data-owner="player1"
+          >
+            Blizzard (3 TP)
+          </button>
+          <button
+            id="strategemP1Necromancy"
+            data-strategem-type="necromancy"
+            data-owner="player1"
+          >
+            Necromancy (1.5 TP)
+          </button>
+          <button
+            id="strategemP1Blast"
+            data-strategem-type="blast"
+            data-owner="player1"
+          >
+            Blast (1 TP)
+          </button>
+          <button
+            id="strategemP1BifratcalBeam"
+            data-strategem-type="bifratcalBeam"
+            data-owner="player1"
+          >
+            Branding Beam (4 TP)
+          </button>
+          <button
+            id="strategemP1BurningWall"
+            data-strategem-type="burningWall"
+            data-owner="player1"
+          >
+            Burning Wall (4 TP)
+          </button>
+        </div>
+      </div>
+
+      <!-- Center Controls -->
+      <div id="center-controls">
+        <div id="phaseDisplayContainer">
+          <div id="phaseDisplay">Real-Time Strategy Mode</div>
+          <div class="progress-bar" style="width: 100%">
+            <div
+              class="progress-fill"
+              id="phaseProgressBar"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+        <!-- Training Progress Panel (visible during training) -->
+        <div
+          id="trainingProgress"
+          style="
+            margin-top: 10px;
+            display: none;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+          "
+        >
+          <div
+            style="
+              background: rgba(0, 0, 0, 0.5);
+              padding: 10px;
+              border-radius: 8px;
+              margin-bottom: 10px;
+              text-align: center;
+              border: 2px solid #4caf50;
+            "
+          >
+            <div style="font-size: 14px; color: #aaa; margin-bottom: 5px">
+              Total Games Played (All Time)
+            </div>
+            <div
+              id="totalGamesCounter"
+              style="
+                font-size: 32px;
+                font-weight: bold;
+                color: #4caf50;
+                font-family: monospace;
+              "
+            >
+              0
+            </div>
+          </div>
+          <div id="trainingStats" style="margin-top: 10px; font-size: 12px">
+            <p>Games Played (Total): <span id="totalGamesPlayed">0</span></p>
+            <p>Exploration Rate: <span id="explorationRate">30%</span></p>
+            <p>Last Game Result: <span id="lastGameResult">-</span></p>
+          </div>
+          <!-- Neural Network Training Stats -->
+          <div
+            id="rlTrainingStats"
+            style="
+              margin-top: 15px;
+              padding: 10px;
+              background: rgba(0, 0, 0, 0.3);
+              border-radius: 4px;
+              display: none;
+            "
+          >
+            <h4 style="margin-top: 0; margin-bottom: 10px; font-size: 14px">
+              Neural Network Training
+            </h4>
+            <p style="margin: 5px 0; font-size: 12px">
+              Network Architecture: <span id="nnArchitecture">-</span>
+            </p>
+            <p style="margin: 5px 0; font-size: 12px">
+              Training Steps: <span id="trainingSteps">0</span>
+            </p>
+            <p style="margin: 5px 0; font-size: 12px">
+              Average Q-Value: <span id="avgQValue">0.00</span>
+            </p>
+            <p style="margin: 5px 0; font-size: 12px">
+              Loss: <span id="trainingLoss">0.00</span>
+            </p>
+            <p style="margin: 5px 0; font-size: 12px">
+              Replay Buffer: <span id="replayBufferSize">0</span>/10000
+            </p>
+            <button
+              id="saveModelBtn"
+              style="margin-top: 8px; padding: 6px 12px; font-size: 12px"
+            >
+              Save Model
+            </button>
+            <button
+              id="loadModelBtn"
+              style="margin-top: 8px; padding: 6px 12px; font-size: 12px"
+            >
+              Load Model
+            </button>
+            <button
+              id="resetModelBtn"
+              style="margin-top: 8px; padding: 6px 12px; font-size: 12px"
+            >
+              Reset Model
+            </button>
+            <input
+              type="file"
+              id="loadModelFile"
+              accept=".json"
+              style="display: none"
+            />
+          </div>
+          <!-- Training Results Summary (shown after each game) -->
+          <div
+            id="trainingResultsSummary"
+            style="margin-top: 10px; display: none"
+          ></div>
+          <button
+            id="playAgainBtn"
+            style="
+              margin-top: 10px;
+              display: none;
+              font-size: 14px;
+              padding: 8px 16px;
+            "
+          >
+            Start Another Training Game
+          </button>
+          <button id="viewWeightsBtn" style="margin-top: 10px; font-size: 12px">
+            View Model Weights
+          </button>
+          <button id="exportRLBtn" style="margin-top: 10px; font-size: 12px">
+            Export RL Agent (Save to File)
+          </button>
+          <button id="importRLBtn" style="margin-top: 10px; font-size: 12px">
+            Import RL Agent (Load from File)
+          </button>
+          <input
+            type="file"
+            id="importRLFile"
+            accept=".json"
+            style="display: none"
+          />
+        </div>
+        <!-- Deck Building Section -->
+        <div
+          id="deckBuildingSection"
+          style="
+            margin-bottom: 10px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid #555;
+          "
+        >
+          <h3 style="margin-top: 0; margin-bottom: 15px">Deck Building</h3>
+
+          <!-- Troops Selection (4 required) -->
+          <div style="margin-bottom: 15px">
+            <h4 style="margin: 5px 0; font-size: 14px">Select 4 Troops:</h4>
+            <div
+              id="deckTroopsSelection"
+              style="display: flex; flex-wrap: wrap; gap: 5px"
+            ></div>
+            <div
+              id="deckTroopsSelected"
+              style="margin-top: 8px; font-size: 12px; color: #aaa"
+            >
+              Selected: <span id="deckTroopsCount">0</span>/4
+            </div>
+          </div>
+
+          <!-- Buildings Selection (2 required) -->
+          <div style="margin-bottom: 15px">
+            <h4 style="margin: 5px 0; font-size: 14px">
+              Buildings (<span id="deckBuildingsCount">0</span>/2):
+            </h4>
+            <div
+              id="deckBuildingsSelection"
+              style="display: flex; flex-wrap: wrap; gap: 5px"
+            ></div>
+            <div style="margin-top: 8px; font-size: 12px; color: #aaa">
+              Select exactly 2 buildings
+            </div>
+          </div>
+
+          <!-- Strategems Selection (2 required) -->
+          <div style="margin-bottom: 15px">
+            <h4 style="margin: 5px 0; font-size: 14px">Select 2 Strategems:</h4>
+            <div
+              id="deckStrategemsSelection"
+              style="display: flex; flex-wrap: wrap; gap: 5px"
+            ></div>
+            <div
+              id="deckStrategemsSelected"
+              style="margin-top: 8px; font-size: 12px; color: #aaa"
+            >
+              Selected: <span id="deckStrategemsCount">0</span>/2
+            </div>
+          </div>
+
+          <button id="saveDeckBtn" style="margin-top: 10px; padding: 8px 16px">
+            Save Deck
+          </button>
+          <div
+            id="deckSaveStatus"
+            style="
+              margin-top: 5px;
+              font-size: 12px;
+              color: #4caf50;
+              display: none;
+            "
+          >
+            Deck saved!
+          </div>
+        </div>
+        <div
+          id="trainModeSelection"
+          style="display: block; margin-bottom: 10px"
+        >
+          <h3>Train CPU with Reinforcement Learning</h3>
+          <p>The AI will learn from each game you play against it.</p>
+
+          <!-- Total Games Counter (visible before training starts) -->
+          <div
+            style="
+              background: rgba(0, 0, 0, 0.5);
+              padding: 10px;
+              border-radius: 8px;
+              margin: 10px 0;
+              text-align: center;
+              border: 2px solid #4caf50;
+            "
+          >
+            <div style="font-size: 14px; color: #aaa; margin-bottom: 5px">
+              Total Games Played (All Time)
+            </div>
+            <div
+              id="totalGamesCounterPreTraining"
+              style="
+                font-size: 32px;
+                font-weight: bold;
+                color: #4caf50;
+                font-family: monospace;
+              "
+            >
+              0
+            </div>
+          </div>
+
+          <button id="startTrainingBtn" style="margin-top: 10px">
+            Start Training Game
+          </button>
+          <button
+            id="viewModelDetailsBtn"
+            style="margin-top: 10px; font-size: 12px; padding: 6px 12px"
+          >
+            View Model Details
+          </button>
+          <button
+            id="resetRLBtn"
+            style="
+              margin-top: 10px;
+              font-size: 12px;
+              padding: 6px 12px;
+              background-color: #d32f2f;
+              color: white;
+            "
+          >
+            Reset RL Training Data
+          </button>
+          <button id="stopTrainingBtn" style="margin-top: 10px; display: none">
+            Stop Training
+          </button>
+        </div>
+        <!-- CPU Resources (shown above canvas in CPU/Training modes) -->
+        <div id="cpu-resources" style="display: none; margin-bottom: 10px">
+          <div style="position: relative; width: 100%">
+            <div
+              class="resource-value"
+              id="rpValueCPU"
+              style="
+                position: absolute;
+                top: -18px;
+                left: 0;
+                font-size: 12px;
+                color: #00ced1;
+                font-weight: bold;
+                z-index: 10;
+              "
+            >
+              0.0
+            </div>
+            <div
+              class="progress-bar resource-bar-rp"
+              style="width: 100%; margin: 3px auto; position: relative"
+            >
+              <div
+                class="progress-fill rp-fill"
+                id="rpBarCPU"
+                style="width: 50%"
+              ></div>
+            </div>
+          </div>
+          <div style="position: relative; width: 100%">
+            <div
+              class="resource-value"
+              id="tpValueCPU"
+              style="
+                position: absolute;
+                top: -18px;
+                left: 0;
+                font-size: 12px;
+                color: #ff00ff;
+                font-weight: bold;
+                z-index: 10;
+              "
+            >
+              0.0
+            </div>
+            <div
+              class="progress-bar resource-bar-tp"
+              style="width: 100%; margin: 3px auto; position: relative"
+            >
+              <div
+                class="progress-fill tp-fill"
+                id="tpBarCPU"
+                style="width: 60%"
+              ></div>
+            </div>
+          </div>
+        </div>
+        <canvas id="gameCanvas" width="700" height="600"></canvas>
+
+        <!-- Player Resources (shown below canvas in CPU/Training modes) -->
+        <div id="player-resources" style="display: none; margin-top: 10px">
+          <div style="position: relative; width: 100%">
+            <div
+              class="resource-value"
+              id="rpValuePlayer"
+              style="
+                position: absolute;
+                top: -18px;
+                left: 0;
+                font-size: 12px;
+                color: #00ced1;
+                font-weight: bold;
+                z-index: 10;
+              "
+            >
+              0.0
+            </div>
+            <div
+              class="progress-bar resource-bar-rp"
+              style="width: 100%; margin: 3px auto; position: relative"
+            >
+              <div
+                class="progress-fill rp-fill"
+                id="rpBarPlayer"
+                style="width: 50%"
+              ></div>
+            </div>
+          </div>
+          <div style="position: relative; width: 100%">
+            <div
+              class="resource-value"
+              id="tpValuePlayer"
+              style="
+                position: absolute;
+                top: -18px;
+                left: 0;
+                font-size: 12px;
+                color: #ff00ff;
+                font-weight: bold;
+                z-index: 10;
+              "
+            >
+              0.0
+            </div>
+            <div
+              class="progress-bar resource-bar-tp"
+              style="width: 100%; margin: 3px auto; position: relative"
+            >
+              <div
+                class="progress-fill tp-fill"
+                id="tpBarPlayer"
+                style="width: 60%"
+              ></div>
+            </div>
+          </div>
+          <div
+            class="combat-tp-text"
+            id="combatTPPlayer"
+            style="text-align: center"
+          ></div>
+        </div>
+
+        <!-- Compact Controls (shown below player resources in CPU/Training modes) -->
+        <div id="compact-controls" style="display: none; margin-top: 15px">
+          <div class="compact-controls-grid">
+            <div class="compact-section">
+              <h4 style="margin: 5px 0; font-size: 14px">Troops</h4>
+              <div class="compact-buttons" id="compact-troop-buttons"></div>
+            </div>
+            <div class="compact-section">
+              <h4 style="margin: 5px 0; font-size: 14px">Buildings</h4>
+              <div class="compact-buttons" id="compact-building-buttons"></div>
+            </div>
+            <div class="compact-section">
+              <h4 style="margin: 5px 0; font-size: 14px">Strategems</h4>
+              <div class="compact-buttons" id="compact-strategem-buttons"></div>
+            </div>
+          </div>
+        </div>
+
+        <button id="pauseBtn">Pause</button>
+        <div id="spawnModeDisplay"></div>
+        <div id="buildModeDisplay"></div>
+        <div id="planModeDisplay"></div>
+      </div>
+
+      <!-- Player 2 Controls -->
+      <div id="player2-controls">
+        <h2>Player 2 (Red)</h2>
+        <div class="progress-text" id="rpText2">RP: 5.0/10 ( +0.25 )</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="rpBar2" style="width: 50%"></div>
+        </div>
+        <div class="progress-text" id="tpText2">TP: 3.0/5 ( +0.1 )</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="tpBar2" style="width: 60%"></div>
+        </div>
+        <div class="combat-tp-text" id="combatTP2"></div>
+
+        <div class="troop-controls">
+          <h3>Troops</h3>
+          <button
+            class="spawn-btn spawn-btn-swordsman"
+            data-troop-type="swordsman"
+            data-owner="player2"
+          >
+            Swordsman (1 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="bannerman"
+            data-owner="player2"
+          >
+            Bannerman (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-archer"
+            data-troop-type="archer"
+            data-owner="player2"
+          >
+            Archer (1.5 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-heavy"
+            data-troop-type="heavy"
+            data-owner="player2"
+          >
+            Heavy (3 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-settler"
+            data-troop-type="settler"
+            data-owner="player2"
+          >
+            Settler (1.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="militia"
+            data-owner="player2"
+          >
+            Militia (0.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="brute"
+            data-owner="player2"
+          >
+            Brute (3 RP)
+          </button>
+          <button
+            class="spawn-btn spawn-btn-sentinel"
+            data-troop-type="sentinel"
+            data-owner="player2"
+          >
+            Sentinel (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="necromancer"
+            data-owner="player2"
+          >
+            Necromancer (3 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="gustKnight"
+            data-owner="player2"
+          >
+            Gust Knight (2.5 RP)
+          </button>
+          <button
+            class="spawn-btn"
+            data-troop-type="grenadier"
+            data-owner="player2"
+          >
+            Grenadier (2 RP)
+          </button>
+        </div>
+
+        <div class="building-controls">
+          <h3>Buildings</h3>
+          <button
+            class="build-btn build-btn-wall"
+            data-building-type="wall"
+            data-owner="player2"
+          >
+            Wall (1 RP)
+          </button>
+          <button
+            class="build-btn build-btn-farm"
+            data-building-type="farm"
+            data-owner="player2"
+          >
+            Farm (2.5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-archertower"
+            data-building-type="archerTower"
+            data-owner="player2"
+          >
+            Archer Tower (8 RP)
+          </button>
+          <button
+            class="build-btn build-btn-sniperoutpost"
+            data-building-type="sniperOutpost"
+            data-owner="player2"
+          >
+            Sniper Outpost (3 RP)
+          </button>
+          <button
+            class="build-btn build-btn-warCamp"
+            data-building-type="warCamp"
+            data-owner="player2"
+          >
+            War Camp (5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-missilesilo"
+            data-building-type="missileSilo"
+            data-owner="player2"
+          >
+            Missile Silo (4 RP)
+          </button>
+          <button
+            class="build-btn build-btn-supplydepot"
+            data-building-type="supplyDepot"
+            data-owner="player2"
+          >
+            Supply Depot (2.5 RP)
+          </button>
+          <button
+            class="build-btn build-btn-warbonesfactory"
+            data-building-type="warBonesFactory"
+            data-owner="player2"
+          >
+            War Bones Factory (5 RP)
+          </button>
+        </div>
+
+        <div class="strategem-controls">
+          <h3>Strategems</h3>
+          <button
+            id="strategemP2Heal"
+            data-strategem-type="heal"
+            data-owner="player2"
+          >
+            Heal (2 TP)
+          </button>
+          <button
+            id="strategemP2DivineWind"
+            data-strategem-type="divineWind"
+            data-owner="player2"
+          >
+            Divine Wind (3.5 TP)
+          </button>
+          <button
+            id="strategemP2BoltStorm"
+            data-strategem-type="boltStorm"
+            data-owner="player2"
+          >
+            Bolt Storm (3 TP)
+          </button>
+          <button
+            id="strategemP2Blizzard"
+            data-strategem-type="blizzard"
+            data-owner="player2"
+          >
+            Blizzard (3 TP)
+          </button>
+          <button
+            id="strategemP2Necromancy"
+            data-strategem-type="necromancy"
+            data-owner="player2"
+          >
+            Necromancy (1.5 TP)
+          </button>
+          <button
+            id="strategemP2Blast"
+            data-strategem-type="blast"
+            data-owner="player2"
+          >
+            Blast (1 TP)
+          </button>
+          <button
+            id="strategemP2BifratcalBeam"
+            data-strategem-type="bifratcalBeam"
+            data-owner="player2"
+          >
+            Branding Beam (4 TP)
+          </button>
+          <button
+            id="strategemP2BurningWall"
+            data-strategem-type="burningWall"
+            data-owner="player2"
+          >
+            Burning Wall (4 TP)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tutorial Overlay (hidden by default) -->
+    <div id="tutorialOverlay" style="display: none">
+      <div id="tutorialBox">
+        <h2 id="tutorialTitle">Tutorial</h2>
+        <p id="tutorialText">Welcome to Strategrid!</p>
+        <div class="tutorial-buttons">
+          <button id="tutorialPrevBtn">Previous</button>
+          <button id="tutorialNextBtn">Next</button>
+          <button id="tutorialSkipBtn">Skip Tutorial</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multiplayer Connection Overlay -->
+    <div id="multiplayerOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; overflow-y: auto;">
+      <div style="background: #222; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; color: #eee; margin: 20px auto;">
+        <h2 style="margin-top: 0;">Multiplayer Connection</h2>
+        <div id="multiplayerStatus" style="margin: 15px 0; padding: 10px; background: #333; border-radius: 4px;">
+          <p id="multiplayerStatusText">Choose an option:</p>
+        </div>
+        
+        <!-- Host Section -->
+        <div id="hostSection" style="display: none;">
+          <h3 style="margin-top: 0;">Host Game</h3>
+          <p style="margin: 10px 0; font-size: 14px;">Share this code with your friend:</p>
+          <div style="background: #111; padding: 20px; border-radius: 4px; margin: 10px 0; border: 2px solid #4CAF50; text-align: center;">
+            <code id="hostOfferCode" style="font-size: 32px; font-weight: bold; color: #4CAF50; display: block; letter-spacing: 4px; font-family: 'Courier New', monospace;"></code>
+          </div>
+          <div style="display: flex; gap: 8px; margin: 10px 0;">
+            <button id="copyOfferBtn" style="flex: 1; padding: 12px; background: #4CAF50; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy</button>
+            <button id="showQRBtn" style="flex: 1; padding: 12px; background: #2196F3; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px;">QR Code</button>
+          </div>
+          <div id="hostQRCode" style="margin: 10px auto; text-align: center; display: none; max-width: 200px;"></div>
+          <p style="margin: 10px 0; font-size: 12px; color: #aaa;">Waiting for player to join...</p>
+        </div>
+        
+        <!-- Join Section -->
+        <div id="joinSection" style="display: none;">
+          <h3 style="margin-top: 0;">Join Game</h3>
+          <label style="display: block; margin-bottom: 8px; font-size: 14px;">Enter 4-digit room code:</label>
+          <input type="text" id="joinOfferInput" maxlength="4" pattern="[0-9]{4}" style="width: 100%; padding: 15px; margin: 8px 0; background: #111; color: #eee; border: 2px solid #444; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 24px; text-align: center; letter-spacing: 4px; box-sizing: border-box;" placeholder="0000" />
+          <button id="joinConnectBtn" style="padding: 12px; background: #4CAF50; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%; margin-top: 8px;">Connect</button>
+        </div>
+        
+        <!-- Deck Builder Section (for PvP) -->
+        <div id="pvpDeckBuilderSection" style="display: none;">
+          <h3 style="margin-top: 0;">Deck Builder</h3>
+          <p style="margin: 10px 0; font-size: 14px; color: #aaa;">Configure your deck before entering matchmaking. You must select exactly 4 troops, 2 strategems, and 2 buildings.</p>
+          
+          <!-- Troops Selection (4 required) -->
+          <div style="margin-bottom: 15px;">
+            <h4 style="margin: 5px 0; font-size: 14px;">Select 4 Troops:</h4>
+            <div id="pvpDeckTroopsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+            <div style="margin-top: 8px; font-size: 12px; color: #aaa;">
+              Selected: <span id="pvpDeckTroopsCount">0</span>/4
+            </div>
+          </div>
+
+          <!-- Buildings Selection (2 required) -->
+          <div style="margin-bottom: 15px;">
+            <h4 style="margin: 5px 0; font-size: 14px;">Select 2 Buildings:</h4>
+            <div id="pvpDeckBuildingsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+            <div style="margin-top: 8px; font-size: 12px; color: #aaa;">
+              Selected: <span id="pvpDeckBuildingsCount">0</span>/2
+            </div>
+          </div>
+
+          <!-- Strategems Selection (2 required) -->
+          <div style="margin-bottom: 15px;">
+            <h4 style="margin: 5px 0; font-size: 14px;">Select 2 Strategems:</h4>
+            <div id="pvpDeckStrategemsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+            <div style="margin-top: 8px; font-size: 12px; color: #aaa;">
+              Selected: <span id="pvpDeckStrategemsCount">0</span>/2
+            </div>
+          </div>
+
+          <div id="pvpDeckValidationStatus" style="margin: 10px 0; padding: 10px; border-radius: 4px; display: none; font-size: 12px;"></div>
+          
+          <button id="pvpSaveDeckBtn" style="padding: 12px; background: #4CAF50; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%; margin-top: 10px;">Save Deck & Continue</button>
+        </div>
+        
+        <!-- Matchmaking Section -->
+        <div id="matchmakingSection" style="display: none;">
+          <h3 style="margin-top: 0;">Matchmaking Queue</h3>
+          <p style="margin: 10px 0; font-size: 14px;">Searching for an opponent...</p>
+          <div style="background: #111; padding: 20px; border-radius: 4px; margin: 10px 0; border: 2px solid #4CAF50; text-align: center;">
+            <div style="font-size: 18px; color: #4CAF50; margin-bottom: 10px;">Waiting for player...</div>
+            <div id="matchmakingStatus" style="font-size: 14px; color: #aaa;">Connecting to matchmaking service...</div>
+          </div>
+          <div style="margin: 10px 0; font-size: 12px; color: #aaa; text-align: center;">
+            <div id="matchmakingTimer" style="font-size: 16px; color: #4CAF50; margin: 10px 0;">00:00</div>
+            <div>You will be assigned to Blue team when matched</div>
+          </div>
+        </div>
+        
+        <!-- Initial Choice Buttons -->
+        <div id="choiceSection">
+          <button id="hostGameBtn" style="padding: 12px; margin: 8px 0; background: #4CAF50; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%;">Host Game</button>
+          <button id="joinGameBtn" style="padding: 12px; margin: 8px 0; background: #2196F3; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%;">Join Game</button>
+        </div>
+        
+        <button id="cancelMultiplayerBtn" style="padding: 10px; margin-top: 15px; background: #666; border: none; color: white; border-radius: 4px; cursor: pointer; width: 100%; font-size: 14px;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Load modules in dependency order -->
+    <!-- Cache-busting: Increment version number (e.g., ?v=2) when you update gameLogic.js -->
+    <script src="src/spatialGrid.js?v=1"></script>
+    <script src="src/audioManager.js?v=1"></script>
+    <script src="src/gameLogic.js?v=2"></script>
+    <script src="src/gameState.js?v=1"></script>
+    <script src="src/deckSystem.js?v=1"></script>
+    <script src="src/pathfindingSystem.js?v=1"></script>
+    <script src="src/territorySystem.js?v=1"></script>
+    <script src="src/resourceSystem.js?v=1"></script>
+    <script src="src/troopSystem.js?v=1"></script>
+    <script src="src/buildingSystem.js?v=1"></script>
+    <script src="src/strategemSystem.js?v=1"></script>
+    <script src="src/renderer.js?v=1"></script>
+    <script src="src/battlePhase.js?v=1"></script>
+    <script src="src/uiState.js?v=1"></script>
+    <script src="src/rlStateEncoder.js?v=1"></script>
+    <script src="src/rlActionSpace.js?v=1"></script>
+    <script src="src/rlNeuralNetwork.js?v=1"></script>
+    <script src="src/rlRewardShaper.js?v=1"></script>
+    <script src="src/rlSystem.js?v=1"></script>
+    <script src="src/aiSystem.js?v=1"></script>
+    <script src="src/signalingClient.js?v=1"></script>
+    <script src="src/networkingSystem.js?v=1"></script>
+    <script src="src/gameLoop.js?v=1"></script>
+    <script src="src/gameSetup.js?v=1"></script>
+    <script src="src/game.js?v=1"></script>
+  </body>
+</html>
