@@ -3,109 +3,175 @@
   <head>
     <meta charset="UTF-8" />
     <title>Strategrid - Main Menu</title>
+    <link rel="stylesheet" href="style.css" />
     <style>
-      /* Basic resets & layout */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body,
-      html {
-        width: 100%;
-        height: 100%;
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body, html {
+        width: 100%; min-height: 100%;
         background-color: #111;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        font-family: sans-serif;
-        color: #eee;
+        display: flex; flex-direction: column;
+        justify-content: flex-start; align-items: center;
+        font-family: sans-serif; color: #eee;
+        padding: 30px 10px;
       }
-      h1 {
-        font-size: 2rem;
-        margin-bottom: 20px;
-      }
-      h2 {
-        margin-bottom: 30px;
-        font-weight: normal;
-        color: #bbb;
-      }
+      h1 { font-size: 2rem; margin-bottom: 20px; }
+      h2 { margin-bottom: 30px; font-weight: normal; color: #bbb; }
       .menu-btn {
-        display: block;
-        margin: 10px 0;
-        padding: 12px 24px;
-        font-size: 1rem;
-        cursor: pointer;
-        border: none;
-        border-radius: 4px;
-        background: #444;
-        color: #eee;
+        display: block; margin: 10px 0;
+        padding: 12px 24px; font-size: 1rem;
+        cursor: pointer; border: none; border-radius: 4px;
+        background: #444; color: #eee;
         transition: background-color 0.2s ease;
       }
-      .menu-btn:hover {
-        background: #555;
-      }
+      .menu-btn:hover { background: #555; }
     </style>
   </head>
   <body>
     <h1>Strategrid</h1>
-    <h2>Choose Game Mode</h2>
+    <h2>Online PvP</h2>
 
-    <button class="menu-btn" id="btnPvC">
-      PvC (Player vs Computer)
-    </button>
-    <button class="menu-btn" id="btnPvPRoomCode">
-      PvP (Room Code)
-    </button>
-    <button class="menu-btn" id="btnPvPOpen">
-      PvP (Open Matchmaking)
-    </button>
+    <button class="menu-btn" id="btnPvPRoomCode">PvP (Room Code)</button>
+    <button class="menu-btn" id="btnPvPOpen">PvP (Open Matchmaking)</button>
+    <button class="menu-btn" id="btnSandbox" style="background:#3a5">Sandbox (Dev)</button>
 
+    <div id="deckBuildingSection" style="margin-top: 30px; width: 480px; max-width: 95vw; text-align: left;">
+      <h3 style="margin-top: 0; margin-bottom: 15px; color: #fff;">Your Deck</h3>
+
+      <div style="margin-bottom: 15px;">
+        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
+          Select 4 Troops: <span id="deckTroopsCount">0</span>/4
+        </h4>
+        <div id="deckTroopsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+      </div>
+
+      <div style="margin-bottom: 15px;">
+        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
+          Select 2 Buildings: <span id="deckBuildingsCount">0</span>/2
+        </h4>
+        <div id="deckBuildingsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+      </div>
+
+      <div style="margin-bottom: 15px;">
+        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
+          Select 2 Strategems: <span id="deckStrategemsCount">0</span>/2
+        </h4>
+        <div id="deckStrategemsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+      </div>
+
+      <button id="saveDeckBtn" style="padding: 8px 16px; margin-top: 10px;">Save Deck</button>
+      <div id="deckSaveStatus" style="margin-top: 5px; font-size: 12px; display: none;"></div>
+    </div>
+
+    <script src="src/deckSystem.js?v=2"></script>
     <script>
-      // Wait for DOM to be ready
       document.addEventListener("DOMContentLoaded", () => {
-        console.log("[Menu] DOM loaded, setting up buttons...");
-        
-        // Navigate to PvC mode
-        const btnPvC = document.getElementById("btnPvC");
-        if (btnPvC) {
-          console.log("[Menu] PvC button found");
-          btnPvC.addEventListener("click", (e) => {
-            e.preventDefault();
-            console.log("[Menu] PvC button clicked, navigating to PvC mode");
-            window.location.href = "game.html?mode=pvc";
+        window.deckSystem = new DeckSystem();
+
+        const displayNames = {
+          swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
+          settler: "Settler", brute: "Brute", sentinel: "Sentinel",
+          wall: "Wall", farm: "Farm", sniperOutpost: "Sniper Outpost",
+          missileSilo: "Missile Silo", warCamp: "War Camp", archerTower: "Archer Tower",
+          heal: "Heal", divineWind: "Divine Wind", blizzard: "Blizzard", blast: "Blast",
+        };
+
+        const savedDeck = window.deckSystem.getPlayerDeck("player1", false);
+
+        function createButtons(container, items, category, limit, countSpanId) {
+          if (!container) return;
+          const countSpan = document.getElementById(countSpanId);
+          container.innerHTML = "";
+
+          items.forEach((key) => {
+            const btn = document.createElement("button");
+            btn.className = "deck-selection-btn";
+            btn.textContent = displayNames[key] || key;
+            btn.dataset.key = key;
+
+            if ((savedDeck[category] || []).includes(key)) btn.classList.add("selected");
+
+            btn.addEventListener("click", () => {
+              const isSelected = btn.classList.contains("selected");
+              const currentCount = container.querySelectorAll(".selected").length;
+              if (isSelected) {
+                btn.classList.remove("selected");
+              } else if (currentCount < limit) {
+                btn.classList.add("selected");
+              }
+              if (countSpan) countSpan.textContent = container.querySelectorAll(".selected").length;
+            });
+
+            container.appendChild(btn);
           });
-        } else {
-          console.error("[Menu] PvC button not found!");
+
+          if (countSpan) countSpan.textContent = container.querySelectorAll(".selected").length;
         }
-        
-        // Navigate to PvP Room Code mode
-        const btnPvPRoomCode = document.getElementById("btnPvPRoomCode");
-        if (btnPvPRoomCode) {
-          console.log("[Menu] PvP Room Code button found");
-          btnPvPRoomCode.addEventListener("click", (e) => {
-            e.preventDefault();
-            console.log("[Menu] PvP Room Code button clicked, navigating to PvP Room Code mode");
-            window.location.href = "game.html?mode=pvp&type=roomcode";
+
+        createButtons(document.getElementById("deckTroopsSelection"), window.deckSystem.getAvailableTroops(), "troops", 4, "deckTroopsCount");
+        createButtons(document.getElementById("deckBuildingsSelection"), window.deckSystem.getAvailableBuildings(), "buildings", 2, "deckBuildingsCount");
+        createButtons(document.getElementById("deckStrategemsSelection"), window.deckSystem.getAvailableStrategems(), "strategems", 2, "deckStrategemsCount");
+
+        const saveBtn = document.getElementById("saveDeckBtn");
+        const saveStatus = document.getElementById("deckSaveStatus");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", () => {
+            const deck = {
+              troops: [...document.getElementById("deckTroopsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
+              buildings: [...document.getElementById("deckBuildingsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
+              strategems: [...document.getElementById("deckStrategemsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
+            };
+            const ok = window.deckSystem.setPlayerDeck("player1", deck);
+            if (saveStatus) {
+              saveStatus.textContent = ok ? "Deck saved!" : "Invalid deck — need 4 troops, 2 buildings, 2 strategems.";
+              saveStatus.style.color = ok ? "#4caf50" : "#f44336";
+              saveStatus.style.display = "block";
+              setTimeout(() => (saveStatus.style.display = "none"), 2500);
+            }
           });
-        } else {
-          console.error("[Menu] PvP Room Code button not found!");
-        }
-        
-        // Navigate to PvP Open Matchmaking mode
-        const btnPvPOpen = document.getElementById("btnPvPOpen");
-        if (btnPvPOpen) {
-          console.log("[Menu] PvP Open button found");
-          btnPvPOpen.addEventListener("click", (e) => {
-            e.preventDefault();
-            console.log("[Menu] PvP Open button clicked, navigating to PvP Open mode");
-            window.location.href = "game.html?mode=pvp&type=matchmaking";
-          });
-        } else {
-          console.error("[Menu] PvP Open button not found!");
         }
       });
+    </script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const btnPvPRoomCode = document.getElementById("btnPvPRoomCode");
+        if (btnPvPRoomCode) {
+          btnPvPRoomCode.addEventListener("click", (e) => {
+            e.preventDefault();
+            window.location.href = "game.html?mode=pvp&type=roomcode";
+          });
+        }
+        const btnPvPOpen = document.getElementById("btnPvPOpen");
+        if (btnPvPOpen) {
+          btnPvPOpen.addEventListener("click", (e) => {
+            e.preventDefault();
+            window.location.href = "game.html?mode=pvp&type=matchmaking";
+          });
+        }
+        const btnSandbox = document.getElementById("btnSandbox");
+        if (btnSandbox) {
+          btnSandbox.addEventListener("click", (e) => {
+            e.preventDefault();
+            window.location.href = "game.html?mode=sandbox";
+          });
+        }
+      });
+    </script>
+
+    <script>
+      // Looping menu music — starts on the first user interaction (browsers block autoplay until then).
+      (function () {
+        const music = new Audio("sounds/menuMusic.wav");
+        music.loop = true;
+        music.volume = 0.5;
+        const start = () => {
+          window.removeEventListener("pointerdown", start);
+          window.removeEventListener("keydown", start);
+          music.play().catch(() => {});
+        };
+        window.addEventListener("pointerdown", start, { once: true });
+        window.addEventListener("keydown", start, { once: true });
+      })();
     </script>
   </body>
 </html>
