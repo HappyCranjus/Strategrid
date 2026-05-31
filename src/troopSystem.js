@@ -116,6 +116,18 @@ class TroopSystem {
       if (!troop.target) {
         troop.target = this._findTarget(troop);
       }
+      // Back-rank fallback: a troop that's walked all the way to the enemy
+      // back rank without ever sighting anything locks onto the globally
+      // nearest enemy troop and pursues, regardless of vision. Settlers are
+      // pure influence carriers and stay in zig-zag mode forever.
+      if (
+        !troop.target &&
+        !troop.isHero &&
+        troop.type !== "settler" &&
+        this._atEnemyBackRank(troop)
+      ) {
+        troop.target = this._findNearestEnemyTroopGlobal(troop);
+      }
       const target = troop.target;
       troop.lastTarget = target; // renderer reads this for targeting lines
 
@@ -135,6 +147,9 @@ class TroopSystem {
           // Retarget the victim onto us. Buildings/towers don't read .target so
           // this only matters for troop victims, which is what we want.
           target.target = troop;
+          // Stamp the hit so kiteable units (e.g. Sentinel) know to break off
+          // their default behavior and respond.
+          target.lastHitTime = now;
           troop.attackFlashTarget = target;
           troop.attackFlashUntil = now + 0.15;
 
@@ -148,24 +163,14 @@ class TroopSystem {
         if (target) {
           // Pursue: aim at the nearest point on the target (matters for multi-tile buildings)
           const np = this._nearestPointOn(target, troop.col, troop.row);
-          const dx = np.x - troop.col;
-          const dy = np.y - troop.row;
-          const mag = Math.sqrt(dx * dx + dy * dy) || 1;
-          const step = effSpeed * deltaTime;
-          troop.col = Math.max(0.5, Math.min(gs.cols - 0.5, troop.col + (dx / mag) * step));
-          troop.row = Math.max(0.5, Math.min(gs.rows - 0.5, troop.row + (dy / mag) * step));
+          this._stepToward(troop, np.x, np.y, effSpeed, deltaTime);
+        } else if (troop.type === "settler") {
+          this._stepSettler(troop, effSpeed, deltaTime);
+        } else if (troop.type === "sentinel" && this._sentinelShouldPatrol(troop)) {
+          this._stepSentinelPatrol(troop, effSpeed, deltaTime);
         } else {
-          // Nothing visible: march toward the enemy hero's current position
-          // until something enters vision.
-          const enemyHero = troop.owner === "player1" ? gs.hero2 : gs.hero1;
-          if (enemyHero) {
-            const dx = enemyHero.col - troop.col;
-            const dy = enemyHero.row - troop.row;
-            const mag = Math.sqrt(dx * dx + dy * dy) || 1;
-            const step = effSpeed * deltaTime;
-            troop.col = Math.max(0.5, Math.min(gs.cols - 0.5, troop.col + (dx / mag) * step));
-            troop.row = Math.max(0.5, Math.min(gs.rows - 0.5, troop.row + (dy / mag) * step));
-          }
+          // Default: walk forward along the deployed row toward the enemy back rank.
+          this._stepForward(troop, effSpeed, deltaTime);
         }
       }
 
@@ -378,6 +383,112 @@ class TroopSystem {
       };
     }
     return { x: target.col, y: target.row };
+  }
+
+  // Unit-vector step toward (aimCol, aimRow), clamped to map bounds. Shared
+  // primitive for pursue / forward-march / settler-zigzag / sentinel-patrol so
+  // they all use identical clamping and step math.
+  _stepToward(troop, aimCol, aimRow, speed, dt) {
+    const gs = this.gameState;
+    const dx = aimCol - troop.col;
+    const dy = aimRow - troop.row;
+    const mag = Math.sqrt(dx * dx + dy * dy) || 1;
+    const step = speed * dt;
+    troop.col = Math.max(0.5, Math.min(gs.cols - 0.5, troop.col + (dx / mag) * step));
+    troop.row = Math.max(0.5, Math.min(gs.rows - 0.5, troop.row + (dy / mag) * step));
+  }
+
+  // Column the troop is trying to reach: the far wall on the enemy's side.
+  _enemyBackRankCol(troop) {
+    return troop.owner === "player1" ? this.gameState.cols - 0.5 : 0.5;
+  }
+
+  // True once the troop has effectively walked to the enemy back-rank column.
+  _atEnemyBackRank(troop) {
+    const cols = this.gameState.cols;
+    return troop.owner === "player1" ? troop.col >= cols - 1.0 : troop.col <= 1.0;
+  }
+
+  // Default forward walk: aim at the enemy back rank on the troop's deployed
+  // row. Bumps and collisions can drift the troop off-row, which is fine —
+  // it keeps marching straight ahead from wherever it currently is.
+  _stepForward(troop, speed, dt) {
+    this._stepToward(troop, this._enemyBackRankCol(troop), troop.deployedRow, speed, dt);
+  }
+
+  // Settler snake: strictly orthogonal legs — vertical to an apex (deployedRow
+  // ± 2), then a single-tile forward step, then vertical to the opposite apex,
+  // and so on. Pure diagonal motion would flatten into a near-straight dash;
+  // orthogonal legs are what produce the visible snake and let the settler
+  // touch more tiles per column of advance.
+  _stepSettler(troop, speed, dt) {
+    const gs = this.gameState;
+    const dirCol = troop.owner === "player1" ? +1 : -1;
+    if (!troop.zigPhase) troop.zigPhase = "vertical";
+
+    if (troop.zigPhase === "advancing") {
+      const aimCol = Math.max(0.5, Math.min(gs.cols - 0.5, troop.zigTargetCol));
+      this._stepToward(troop, aimCol, troop.row, speed, dt);
+      if (Math.abs(troop.col - aimCol) < 0.15) {
+        troop.zigPhase = "vertical";
+      }
+    } else {
+      const aimRow = Math.max(
+        0.5,
+        Math.min(gs.rows - 0.5, troop.deployedRow + 2 * troop.zigDir)
+      );
+      this._stepToward(troop, troop.col, aimRow, speed, dt);
+      if (Math.abs(troop.row - aimRow) < 0.15) {
+        troop.zigDir = -troop.zigDir;
+        troop.zigPhase = "advancing";
+        troop.zigTargetCol = troop.col + dirCol;
+      }
+    }
+  }
+
+  // Sentinel patrol: walk up and down a ±3 row band centered on the deployed
+  // row, always returning to the deployed column. Flip patrolDir when the
+  // current row gets within 0.15 of the band edge.
+  _stepSentinelPatrol(troop, speed, dt) {
+    const gs = this.gameState;
+    const bandTop    = Math.max(0.5,            troop.deployedRow - 3);
+    const bandBottom = Math.min(gs.rows - 0.5, troop.deployedRow + 3);
+    const aimRow = troop.patrolDir > 0 ? bandBottom : bandTop;
+    this._stepToward(troop, troop.deployedCol, aimRow, speed, dt);
+    if (Math.abs(troop.row - aimRow) < 0.15) {
+      troop.patrolDir = -troop.patrolDir;
+    }
+  }
+
+  // Sentinel patrols by default. The first time it acquires a target OR takes
+  // any damage, it commits forever — patrolBroken is one-way. After that the
+  // sentinel either pursues (if it has a target) or walks straight forward
+  // like a regular troop, never going back to patrol even if the bait dies.
+  _sentinelShouldPatrol(troop) {
+    if (troop.patrolBroken) return false;
+    if (troop.target || troop.lastHitTime > 0) {
+      troop.patrolBroken = true;
+      return false;
+    }
+    return true;
+  }
+
+  // Globally-nearest enemy troop, ignoring vision. Used as the back-rank
+  // fallback so a unit that walked the whole map without sighting anything
+  // still finds something to fight.
+  _findNearestEnemyTroopGlobal(troop) {
+    const gs = this.gameState;
+    const enemy = troop.owner === "player1" ? "player2" : "player1";
+    let best = null;
+    let bestDist = Infinity;
+    for (const t of gs.troops) {
+      if (t.owner !== enemy) continue;
+      const dx = t.col - troop.col;
+      const dy = t.row - troop.row;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestDist) { best = t; bestDist = d; }
+    }
+    return best;
   }
 
   createTroop(type, row, col, owner) {
