@@ -49,10 +49,10 @@ const buildingTypes = {
     width: 1,
     height: 1,
     color: "#5a6578",
-    damage: 6,
+    damage: 11,
     range: 7,
     attackCooldown: 1.0,
-    hpRegen: 1.5,
+    hpRegen: 0.2,
     damageReduction: 0.3,
   },
   warCamp: {
@@ -161,7 +161,7 @@ const troopTypes = {
     range: 1.0,
     vision: 5.0,
     speed: 0.1,
-    mass: 2.5,
+    mass: 1.5,
     radius: 0.35,
   },
   militia: {
@@ -194,7 +194,7 @@ const troopTypes = {
     range: 0.75,
     vision: 5.5,
     speed: 1.25,
-    mass: 1.5,
+    mass: 1.25,
     radius: 0.3,
   },
   sentinel: {
@@ -210,7 +210,7 @@ const troopTypes = {
   },
   brickMcStick: {
     cost: 0,
-    hp: 500,
+    hp: 400,
     damage: 25,
     attackSpeed: 1.0,
     range: 1.5,
@@ -219,21 +219,21 @@ const troopTypes = {
     mass: 3.0,
     radius: 0.42,
     isHero: true,
-    hpRegen: 4,
+    hpRegen: 1.75,
     damageReduction: 0.5,
   },
   strategia: {
     cost: 0,
-    hp: 300,
+    hp: 245,
     damage: 13,
     attackSpeed: 1.5,
     range: 7,
     vision: 7,
     speed: 1.25,
-    mass: 2.5,
+    mass: 1.25,
     radius: 0.35,
     isHero: true,
-    hpRegen: 2,
+    hpRegen: 1,
     damageReduction: 0.5,
   },
 };
@@ -255,6 +255,10 @@ class GameLogic {
       console.warn(`[GameLogic] Unknown troop type: ${type}`);
       return null;
     }
+    // Rows are 0..15 in the standard 16-row grid; mid-row (8) decides which
+    // way Settler zig-zag and Sentinel patrol head on their first leg, so a
+    // troop deployed in the top half initially moves down, and vice versa.
+    const startDir = row < 8 ? +1 : -1;
     return {
       type,
       owner,
@@ -275,6 +279,14 @@ class GameLogic {
       damageReduction: def.damageReduction || 0,
       attackTimer: 0,
       moveTimer: 0,
+      deployedRow: row,
+      deployedCol: col,
+      lastHitTime: 0,
+      zigDir: startDir,
+      zigPhase: "vertical",
+      zigTargetCol: col,
+      patrolDir: startDir,
+      patrolBroken: false,
     };
   }
 
