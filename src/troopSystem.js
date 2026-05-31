@@ -171,8 +171,8 @@ class TroopSystem {
 
       // Divine-Wind push velocity (per-frame, consumed each tick)
       if (troop.pushVx || troop.pushVy) {
-        troop.col = Math.max(0.5, Math.min(gs.cols - 0.5, troop.col + troop.pushVx * deltaTime));
-        troop.row = Math.max(0.5, Math.min(gs.rows - 0.5, troop.row + troop.pushVy * deltaTime));
+        troop.col = this._clampCol(troop, troop.col + troop.pushVx * deltaTime);
+        troop.row = this._clampRow(troop, troop.row + troop.pushVy * deltaTime);
         troop.pushVx = 0;
         troop.pushVy = 0;
       }
@@ -183,6 +183,21 @@ class TroopSystem {
   }
 
   /**
+   * Hero-aware on-map clamp. Heroes use the tighter sprite-flush bound
+   * `cols - 1.5` / `rows - 1.5` (matches heroInput) so collision pushback
+   * can't deposit them past where the input clamp would accept — otherwise
+   * the position "snaps" on the next keypress.
+   */
+  _clampCol(t, c) {
+    const hi = t.isHero ? this.gameState.cols - 1.5 : this.gameState.cols - 0.5;
+    return Math.max(0.5, Math.min(hi, c));
+  }
+  _clampRow(t, r) {
+    const hi = t.isHero ? this.gameState.rows - 1.5 : this.gameState.rows - 0.5;
+    return Math.max(0.5, Math.min(hi, r));
+  }
+
+  /**
    * Push apart overlapping troops (mass-weighted) and push troops out of enemy
    * building footprints (building has infinite mass; friendly buildings are
    * pass-through). One pass per tick — settles tight scrums within a few frames.
@@ -190,8 +205,6 @@ class TroopSystem {
   _resolveCollisions() {
     const gs = this.gameState;
     const troops = gs.troops;
-    const clampCol = (c) => Math.max(0.5, Math.min(gs.cols - 0.5, c));
-    const clampRow = (r) => Math.max(0.5, Math.min(gs.rows - 0.5, r));
 
     // ── Troop vs troop (mass-weighted) ──
     for (let i = 0; i < troops.length; i++) {
@@ -224,10 +237,10 @@ class TroopSystem {
         const aShare = bm / total; // lighter unit moves more
         const bShare = am / total;
 
-        a.col = clampCol(a.col - nx * overlap * aShare);
-        a.row = clampRow(a.row - ny * overlap * aShare);
-        b.col = clampCol(b.col + nx * overlap * bShare);
-        b.row = clampRow(b.row + ny * overlap * bShare);
+        a.col = this._clampCol(a, a.col - nx * overlap * aShare);
+        a.row = this._clampRow(a, a.row - ny * overlap * aShare);
+        b.col = this._clampCol(b, b.col + nx * overlap * bShare);
+        b.row = this._clampRow(b, b.row + ny * overlap * bShare);
       }
     }
 
@@ -255,16 +268,16 @@ class TroopSystem {
           const dt = t.row - top;
           const db = bottom - t.row;
           const min = Math.min(dl, dr, dt, db);
-          if      (min === dl) t.col = clampCol(left   - r);
-          else if (min === dr) t.col = clampCol(right  + r);
-          else if (min === dt) t.row = clampRow(top    - r);
-          else                 t.row = clampRow(bottom + r);
+          if      (min === dl) t.col = this._clampCol(t, left   - r);
+          else if (min === dr) t.col = this._clampCol(t, right  + r);
+          else if (min === dt) t.row = this._clampRow(t, top    - r);
+          else                 t.row = this._clampRow(t, bottom + r);
           continue;
         }
 
         const overlap = r - d;
-        t.col = clampCol(t.col + (dx / d) * overlap);
-        t.row = clampRow(t.row + (dy / d) * overlap);
+        t.col = this._clampCol(t, t.col + (dx / d) * overlap);
+        t.row = this._clampRow(t, t.row + (dy / d) * overlap);
       }
     }
   }
