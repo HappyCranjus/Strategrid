@@ -87,6 +87,10 @@ class TroopSystem {
     if (gs.deathsThisFrame) gs.deathsThisFrame.length = 0;
     else gs.deathsThisFrame = [];
 
+    // Stamp inspire buff fields on friendlies in each Bannerman's aura zone
+    // before the main loop reads them for regen / speed / attack multipliers.
+    this._applyInspirationZones(now);
+
     for (let i = gs.troops.length - 1; i >= 0; i--) {
       const troop = gs.troops[i];
 
@@ -103,11 +107,20 @@ class TroopSystem {
       // distinguishes the two.
       if (troop.invisible && !troop.cloakActive) continue;
 
+      // Bannerman "Inspired" aura — set by _applyInspirationZones earlier this
+      // frame. Read once here so regen and the movement/attack blocks below
+      // share the same flag.
+      const inspired = troop.inspiredUntil && troop.inspiredUntil > now;
+
       // Passive HP regen (heroes have this; normal troops have hpRegen=0).
       // Applied before damage-this-frame so a unit at full HP doesn't briefly
-      // overshoot maxHP, and so death-by-DOT this tick still wins.
-      if (troop.hpRegen && troop.hp > 0 && troop.hp < troop.maxHP) {
-        troop.hp = Math.min(troop.maxHP, troop.hp + troop.hpRegen * deltaTime);
+      // overshoot maxHP, and so death-by-DOT this tick still wins. Inspired
+      // troops get an additive regen boost while in a Bannerman zone.
+      const baseRegen = troop.hpRegen || 0;
+      const inspireReg = inspired ? (troop.inspireRegen || 0) : 0;
+      const totalRegen = baseRegen + inspireReg;
+      if (totalRegen > 0 && troop.hp > 0 && troop.hp < troop.maxHP) {
+        troop.hp = Math.min(troop.maxHP, troop.hp + totalRegen * deltaTime);
       }
 
       // Burn DOT (applied before death check so it can kill). Garrisoned
@@ -194,7 +207,14 @@ class TroopSystem {
       const hasteAtk  = hasted ? (troop.hasteAttackFactor || 1) : 1;
       // Chill multiplier: 1% per stack of movement/attack debuff, capped at 80%.
       const chillMul = Math.max(0.2, 1 - 0.01 * (troop.chillStacks || 0));
-      const effSpeed = troop.speed * slowMove * hasteMove * chillMul;
+      // Inspire multipliers (Bannerman aura) — stack independently with haste.
+      const inspireMove = inspired ? (troop.inspireSpeedFactor  || 1) : 1;
+      const inspireAtk  = inspired ? (troop.inspireAttackFactor || 1) : 1;
+      // Berserker proc (Brute kill reward) — stacks multiplicatively with everything else.
+      const berserk     = troop.berserkerUntil && troop.berserkerUntil > now;
+      const berserkMove = berserk ? (troop.berserkerSpeedFactor  || 1) : 1;
+      const berserkAtk  = berserk ? (troop.berserkerAttackFactor || 1) : 1;
+      const effSpeed = troop.speed * slowMove * hasteMove * chillMul * inspireMove * berserkMove;
 
       const dist = this._distanceTo(troop, target);
       const inAttackRange = target && dist <= troop.range;
@@ -202,17 +222,74 @@ class TroopSystem {
       if (inAttackRange) {
         troop.attackTimer = (troop.attackTimer || 0) + deltaTime;
         const attackInterval = troop.attackSpeed > 0
-          ? 1 / (troop.attackSpeed * slowAtk * hasteAtk * chillMul)
+          ? 1 / (troop.attackSpeed * slowAtk * hasteAtk * chillMul * inspireAtk * berserkAtk)
           : Infinity;
         if (troop.attackTimer >= attackInterval) {
           troop.attackTimer -= attackInterval;
+          const wasAlive = target.hp > 0;
           applyDamage(target, troop.damage);
-          // Retarget the victim onto us. Buildings/towers don't read .target so
-          // this only matters for troop victims, which is what we want.
-          target.target = troop;
-          // Stamp the hit so kiteable units (e.g. Sentinel) know to break off
-          // their default behavior and respond.
-          target.lastHitTime = now;
+          if (troop.type === "brute" && wasAlive && target.hp <= 0) {
+            const bdef = window.troopTypes ? window.troopTypes.brute : null;
+            const heal = (bdef && bdef.berserkerHeal) || 10;
+            const dur  = (bdef && bdef.berserkerDuration) || 1.25;
+            troop.hp = Math.min(troop.maxHP, troop.hp + heal);
+            troop.berserkerUntil        = now + dur;
+            troop.berserkerSpeedFactor  = (bdef && bdef.berserkerSpeedFactor)  || 2.0;
+            troop.berserkerAttackFactor = (bdef && bdef.berserkerAttackFactor) || 2.0;
+            if (gs.damagePopups) {
+              gs.damagePopups.push({
+                col: troop.col,
+                row: troop.row,
+                spawnTime: now,
+                label: "BERSERK!",
+                color: "#ff6020",
+                dmg: 0,
+              });
+            }
+          }
+          // Gust Knight: every swing emits a forward gust — a rectangle of
+          // gustLength tiles deep along the attack axis, gustWidth tiles wide
+          // perpendicular. Every enemy troop inside gets shoved away from the
+          // Gust Knight. Buildings sit in a separate array and are naturally
+          // unaffected. Mass scaling lives inside applyKnockback. Only the
+          // focused target takes damage; the area is push-only.
+          if (troop.type === "gustKnight") {
+            const gdef = window.troopTypes ? window.troopTypes.gustKnight : null;
+            const dist  = (gdef && gdef.gustKnockback) || 0.6;
+            const len   = (gdef && gdef.gustLength)    || 3;
+            const halfW = ((gdef && gdef.gustWidth)    || 2) / 2;
+            let dx = target.col - troop.col;
+            let dy = target.row - troop.row;
+            const mag = Math.sqrt(dx * dx + dy * dy) || 1;
+            dx /= mag; dy /= mag;
+            const px = -dy, py = dx;
+            const ox = troop.col + 0.5, oy = troop.row + 0.5;
+            for (const t of gs.troops) {
+              if (t === troop || t.owner === troop.owner) continue;
+              if (t.hp <= 0 || t.invisible || t.garrisonedIn) continue;
+              const rx = t.col - troop.col;
+              const ry = t.row - troop.row;
+              const along  = rx * dx + ry * dy;
+              const across = rx * px + ry * py;
+              if (along < 0 || along > len) continue;
+              if (Math.abs(across) > halfW) continue;
+              applyKnockback(t, ox, oy, dist);
+            }
+            if (gs.damagePopups) {
+              gs.damagePopups.push({
+                col: troop.col + dx * (len / 2),
+                row: troop.row + dy * (len / 2),
+                spawnTime: now,
+                label: "GUST!",
+                color: "#9ad8ff",
+                dmg: 0,
+              });
+            }
+          }
+          // If the victim isn't already engaged with someone, pull them onto us
+          // so they respond to the threat. Troops mid-fight keep their target —
+          // this prevents ranged attackers from pulling enemies across the map.
+          if (!target.target) target.target = troop;
           troop.attackFlashTarget = target;
           troop.attackFlashUntil = now + 0.15;
 
@@ -256,6 +333,45 @@ class TroopSystem {
 
     // Resolve overlaps after all troops have moved
     this._resolveCollisions();
+  }
+
+  /**
+   * Stamp the Bannerman "Inspired" buff onto every friendly troop standing in
+   * a 7-col × 5-row zone trailing behind each living Bannerman. Buff is set
+   * (not stacked) — overlapping Bannermen write the same fields with the same
+   * values. A 0.5s tail (matching chronoHaste's linger) keeps inspired troops
+   * from flickering between buffed/unbuffed at the zone edge. Tile-discrete
+   * via Math.floor, matching the user's spec preview.
+   */
+  _applyInspirationZones(now) {
+    const gs = this.gameState;
+    const tail = 0.5;
+    for (const banner of gs.troops) {
+      if (banner.type !== "bannerman") continue;
+      if (banner.hp <= 0 || banner.active === false) continue;
+      if (banner.invisible) continue;
+      const backDir = banner.owner === "player1" ? -1 : +1;
+      const depth = banner.inspireBackCols || 7;
+      const half = banner.inspireSideRows || 2;
+      const bc = Math.floor(banner.col);
+      const br = Math.floor(banner.row);
+      const cMin = backDir === -1 ? bc - (depth - 1) : bc;
+      const cMax = backDir === -1 ? bc                : bc + (depth - 1);
+      const rMin = br - half;
+      const rMax = br + half;
+      for (const t of gs.troops) {
+        if (t === banner) continue;
+        if (t.owner !== banner.owner) continue;
+        if (t.hp <= 0) continue;
+        const tc = Math.floor(t.col);
+        const tr = Math.floor(t.row);
+        if (tc < cMin || tc > cMax || tr < rMin || tr > rMax) continue;
+        t.inspiredUntil       = now + tail;
+        t.inspireSpeedFactor  = banner.inspireSpeedFactor  || 1.2;
+        t.inspireAttackFactor = banner.inspireAttackFactor || 1.2;
+        t.inspireRegen        = banner.inspireRegen        || 1.0;
+      }
+    }
   }
 
   /**
@@ -622,13 +738,13 @@ class TroopSystem {
     }
   }
 
-  // Sentinel patrols by default. The first time it acquires a target OR takes
-  // any damage, it commits forever — patrolBroken is one-way. After that the
-  // sentinel either pursues (if it has a target) or walks straight forward
-  // like a regular troop, never going back to patrol even if the bait dies.
+  // Sentinel patrols by default. The first time it acquires a target it
+  // commits forever — patrolBroken is one-way. After that the sentinel
+  // either pursues (if it has a target) or walks straight forward like
+  // a regular troop, never going back to patrol even if the bait dies.
   _sentinelShouldPatrol(troop) {
     if (troop.patrolBroken) return false;
-    if (troop.target || troop.lastHitTime > 0) {
+    if (troop.target) {
       troop.patrolBroken = true;
       return false;
     }

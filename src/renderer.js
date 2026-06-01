@@ -12,6 +12,8 @@ const troopSpriteFiles = {
   settler:      { player1: "blueSettler.jpg",   player2: "redSettler.jpg" },
   sentinel:     { player1: "blueSentinel.jpg",  player2: "redSentinel.jpg" },
   brute:        { player1: "blueBrute.jpg",     player2: "redBrute2.png" },
+  bannerman:    { player1: "Blue_Bannerman.png", player2: "Red_Bannerman.png" },
+  gustKnight:   { player1: "Blue_GustKnight.png", player2: "Red_GustKnight.png" },
   skeleton:     { player1: "Blue_Skeleton.png", player2: "Red_Skeleton.png" },
   brickMcStick: { player1: "BrickMcStick_Blue.png", player2: "BrickMcStick_Red.png" },
   strategia:    { player1: "Strategia_Blue.png",    player2: "Strategia_Red.png" },
@@ -389,6 +391,26 @@ class Renderer {
         ctx.stroke();
       }
 
+      // Berserker active visual: pulsing red ring that throbs at ~6 Hz and
+      // dims as the buff expires, so the player can read both "is berserk"
+      // and "for how much longer" at a glance.
+      if (t.berserkerUntil && t.berserkerUntil > now) {
+        const remaining = t.berserkerUntil - now;
+        const fade = Math.min(1, remaining / 0.4);
+        const pulse = 0.7 + 0.3 * Math.sin(now * 12);
+        const ringR = auraR * 1.18;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 60, 40, ${fade * pulse})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR * 0.92, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 180, 60, ${fade * pulse * 0.6})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
       // HP bar — heroes get a wider bar so the bigger HP pool reads clearly.
       const hpFrac = t.hp / t.maxHP;
       const barHalf = isHero ? auraR : r;
@@ -407,10 +429,12 @@ class Renderer {
         const cdY = barY - barH - 1;
         const slowedT = t.slowUntil  && t.slowUntil  > now;
         const hastedT = t.hasteUntil && t.hasteUntil > now;
+        const berserkT = t.berserkerUntil && t.berserkerUntil > now;
         const slowAtkT  = slowedT ? (t.slowAttackFactor  || 1) : 1;
         const hasteAtkT = hastedT ? (t.hasteAttackFactor || 1) : 1;
+        const berserkAtkT = berserkT ? (t.berserkerAttackFactor || 1) : 1;
         const chillMul = Math.max(0.2, 1 - 0.01 * (t.chillStacks || 0));
-        const attackInterval = 1 / (t.attackSpeed * slowAtkT * hasteAtkT * chillMul);
+        const attackInterval = 1 / (t.attackSpeed * slowAtkT * hasteAtkT * chillMul * berserkAtkT);
         const cdFrac = Math.max(0, Math.min(1, (t.attackTimer || 0) / attackInterval));
         ctx.fillStyle = "#333";
         ctx.fillRect(cx - barHalf, cdY, barHalf * 2, barH);
@@ -506,11 +530,11 @@ class Renderer {
       if (age < 0 || age > ttl) continue;
       const x = (p.col + 0.5) * ts;
       const y = (p.row + 0.5) * ts - age * ts * 1.5;
-      const label = "-" + (Math.round(p.dmg * 10) / 10);
+      const label = p.label != null ? p.label : "-" + (Math.round(p.dmg * 10) / 10);
       ctx.globalAlpha = Math.max(0, 1 - age / ttl);
       ctx.fillStyle = "#000";
       ctx.fillText(label, x + 1, y + 1);
-      ctx.fillStyle = "#ff5050";
+      ctx.fillStyle = p.color || "#ff5050";
       ctx.fillText(label, x, y);
     }
     ctx.restore();
