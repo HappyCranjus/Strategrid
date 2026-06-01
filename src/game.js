@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.gameSetupResult = await GameSetup.initialize(canvas);
     window.gameState = window.gameSetupResult.gameState;
     window.gameLogic = window.gameSetupResult.gameLogic;
+    window.strategemSystem = window.gameSetupResult.strategemSystem;
     window.networkingSystem = window.gameSetupResult.networkingSystem || null;
 
     if (window.gameSetupResult.audioManager) {
@@ -199,9 +200,14 @@ function buildDeckButtons(networkingSystem) {
   const displayNames = {
     swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
     settler: "Settler", brute: "Brute", sentinel: "Sentinel",
-    wall: "Wall", farm: "Farm", sniperOutpost: "Sniper", missileSilo: "Missile Silo",
-    warCamp: "War Camp", archerTower: "Archer Tower",
-    heal: "Heal", divineWind: "Divine Wind", blizzard: "Blizzard", blast: "Blast",
+    wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
+    supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
+    chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
+    heal: "Heal Burst", wind: "Wind", necromancy: "Necromancy", ruin: "Ruin",
+    blast: "Blast", chainLightning: "Chain Lightning", gravityField: "Gravity Field",
+    lesserTeleport: "Lesser Teleport", greaterTeleport: "Greater Teleport",
+    chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
+    summoningStrike: "Summoning Strike", ambush: "Ambush",
   };
 
   const costLabel = (kind, key) => {
@@ -223,13 +229,15 @@ function buildDeckButtons(networkingSystem) {
   const ui = window.gameSetupResult && window.gameSetupResult.uiState;
   const gs = window.gameSetupResult && window.gameSetupResult.gameState;
 
+  let troopIdx = 0;
   for (const t of deck.troops || []) {
+    troopIdx++;
     const btn = document.createElement("button");
-    btn.textContent = `${displayNames[t] || t} (${costLabel("troop", t)})`;
+    btn.textContent = `[${troopIdx}] ${displayNames[t] || t} (${costLabel("troop", t)})`;
     btn.dataset.troopType = t;
     btn.dataset.owner = localPlayerId;
     btn.addEventListener("click", () => {
-      if (ui && gs && gs.canPlayerAct(localPlayerId)) ui.setSpawnMode(localPlayerId, t);
+      if (ui && gs && gs.canPlayerAct(localPlayerId)) ui.toggleSpawnMode(localPlayerId, t);
     });
     troopContainer.appendChild(btn);
   }
@@ -252,6 +260,26 @@ function buildDeckButtons(networkingSystem) {
       if (ui) ui.setStrategemMode(localPlayerId, s);
     });
     strategemContainer.appendChild(btn);
+  }
+
+  // Hero ability button (SPACEBAR alias). One per local hero, appended into
+  // the strategem row so the cooldown overlay machinery picks it up uniformly.
+  const localHero = (localPlayerId === "player1") ? (gs && gs.hero1) : (gs && gs.hero2);
+  const gl = window.gameLogic;
+  if (localHero && gl && gl.getHeroAbility) {
+    const abilityDef = gl.getHeroAbility(localHero.type);
+    if (abilityDef) {
+      const btn = document.createElement("button");
+      const label = displayNames[abilityDef.key] || abilityDef.key;
+      btn.textContent = `[Space] ${label} (${abilityDef.tpCost} TP)`;
+      btn.dataset.heroAbilityKey = abilityDef.key;
+      btn.dataset.heroType = localHero.type;
+      btn.dataset.owner = localPlayerId;
+      btn.addEventListener("click", () => {
+        if (window.strategemSystem) window.strategemSystem.tryActivateHeroAbility(localPlayerId);
+      });
+      strategemContainer.appendChild(btn);
+    }
   }
 }
 
@@ -306,21 +334,23 @@ function buildSandboxControls() {
         <div class="deck-section"><div id="sbTroopsP1" class="button-row"></div></div>
         <div class="deck-section"><div id="sbBuildingsP1" class="button-row"></div></div>
         <div class="deck-section"><div id="sbStrategemsP1" class="button-row"></div></div>
+        <div class="deck-section"><div id="sbAbilitiesP1" class="button-row"></div></div>
       </div>
       <div data-side="player2">
         <h4 style="color:#ff6666;margin:4px 0;">Red (P2)</h4>
         <div class="deck-section"><div id="sbTroopsP2" class="button-row"></div></div>
         <div class="deck-section"><div id="sbBuildingsP2" class="button-row"></div></div>
         <div class="deck-section"><div id="sbStrategemsP2" class="button-row"></div></div>
+        <div class="deck-section"><div id="sbAbilitiesP2" class="button-row"></div></div>
       </div>
     </div>
   `;
 
-  renderSandboxDeck("player1", "sbTroopsP1", "sbBuildingsP1", "sbStrategemsP1");
-  renderSandboxDeck("player2", "sbTroopsP2", "sbBuildingsP2", "sbStrategemsP2");
+  renderSandboxDeck("player1", "sbTroopsP1", "sbBuildingsP1", "sbStrategemsP1", "sbAbilitiesP1");
+  renderSandboxDeck("player2", "sbTroopsP2", "sbBuildingsP2", "sbStrategemsP2", "sbAbilitiesP2");
 }
 
-function renderSandboxDeck(owner, troopsId, buildingsId, strategemsId) {
+function renderSandboxDeck(owner, troopsId, buildingsId, strategemsId, abilitiesId) {
   const ui = window.gameSetupResult && window.gameSetupResult.uiState;
   const gs = window.gameSetupResult && window.gameSetupResult.gameState;
   const gl = window.gameLogic;
@@ -336,14 +366,20 @@ function renderSandboxDeck(owner, troopsId, buildingsId, strategemsId) {
   const trooper = document.getElementById(troopsId);
   const builder = document.getElementById(buildingsId);
   const stratter = document.getElementById(strategemsId);
-  [trooper, builder, stratter].forEach((el) => el && (el.innerHTML = ""));
+  const abler = abilitiesId ? document.getElementById(abilitiesId) : null;
+  [trooper, builder, stratter, abler].forEach((el) => el && (el.innerHTML = ""));
 
   const display = (k) => ({
     swordsman: "Sword", archer: "Archer", heavy: "Heavy", militia: "Militia",
     settler: "Settler", brute: "Brute", sentinel: "Sentinel",
-    wall: "Wall", farm: "Farm", sniperOutpost: "Sniper", missileSilo: "Missile",
-    warCamp: "WarCamp", archerTower: "ArchTwr",
-    heal: "Heal", divineWind: "Wind", blizzard: "Blizz", blast: "Blast",
+    wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
+    supplyDepot: "Depot", warBonesFactory: "Bones",
+    chillTurret: "Chill", lavaMortar: "Mortar",
+    heal: "Heal", wind: "Wind", necromancy: "Necro", ruin: "Ruin",
+    blast: "Blast", chainLightning: "Chain", gravityField: "Gravity",
+    lesserTeleport: "L.Tele", greaterTeleport: "G.Tele",
+    chronoHaste: "Haste", chronoSlow: "Slow", chronoStop: "Stop",
+    summoningStrike: "Sum.Strike", ambush: "Ambush",
   }[k] || k);
 
   const mk = (kind, key, cost, onClick) => {
@@ -366,7 +402,28 @@ function renderSandboxDeck(owner, troopsId, buildingsId, strategemsId) {
   }
   for (const s of deck.strategems || []) {
     const def = gl.strategemTypes[s]; if (!def) continue;
-    stratter && stratter.appendChild(mk("strategem", s, `${def.tpCost}T`, () => ui.setStrategemMode(owner, s)));
+    const b = mk("strategem", s, `${def.tpCost}T`, () => ui.setStrategemMode(owner, s));
+    b.dataset.strategemType = s;
+    b.dataset.owner = owner;
+    stratter && stratter.appendChild(b);
+  }
+
+  // Hero ability button for this side's hero. Cooldown overlay attaches via
+  // [data-hero-ability-key] (see renderer._drawStrategemCooldowns).
+  const hero = (owner === "player1") ? gs.hero1 : gs.hero2;
+  if (abler && hero && gl.getHeroAbility) {
+    const def = gl.getHeroAbility(hero.type);
+    if (def) {
+      const keyLabel = (owner === "player1") ? "Space" : "Enter";
+      const b = mk("ability", def.key, `${def.tpCost}T`, () => {
+        if (window.strategemSystem) window.strategemSystem.tryActivateHeroAbility(owner);
+      });
+      b.textContent = `[${keyLabel}] ${display(def.key)} ${def.tpCost}T`;
+      b.dataset.heroAbilityKey = def.key;
+      b.dataset.heroType = hero.type;
+      b.dataset.owner = owner;
+      abler.appendChild(b);
+    }
   }
 }
 

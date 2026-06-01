@@ -75,9 +75,9 @@ class ResourceSystem {
 }
 
 ResourceSystem.PHASE_RATES = {
-  opening:       [1.0,  0.01],
-  assault:       [1.25, 0.015],
-  endgame:       [2.0,  0.02],
+  opening:       [1.0,  0.003],
+  assault:       [1.25, 0.005],
+  endgame:       [2.0,  0.007],
   intermission1: [0,    0],
   intermission2: [0,    0],
 };

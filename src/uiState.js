@@ -41,6 +41,7 @@ class UIState {
     this.updateUIForDeck();
     this._setupCanvasClickHandler();
     this._setupCanvasMoveHandler();
+    this._setupTroopHotkeys();
   }
 
   /** Cursor tracking so renderer can draw a ghost preview of the active mode */
@@ -109,7 +110,6 @@ class UIState {
     gs.troops.push(troop);
     const am = window.gameSetupResult && window.gameSetupResult.audioManager;
     if (am) am.playTroopSpawn(troop);
-    this.spawnMode = null;
   }
 
   /**
@@ -201,6 +201,12 @@ class UIState {
     const tpCost = def.tpCost || 0;
     if ((gs.currentTP[owner] || 0) < tpCost) return;
 
+    // Cooldown gate — refuse late even if the user got here via a stale
+    // setStrategemMode call.
+    if (def.cooldown != null && this.strategemSystem && !this.strategemSystem.isReady(owner, strategemType)) {
+      return;
+    }
+
     const midCol = Math.floor(gs.cols / 2);
     const inOwnHalf =
       (owner === "player1" && col >= 0 && col < midCol) ||
@@ -210,21 +216,25 @@ class UIState {
 
     let entity = null;
     if (def.targeting === "twoClick") {
-      // 1st click: set pending center; 2nd click: commit with direction
+      // 1st click: set pending start; 2nd click: commit with direction +
+      // end-tile coords so Wind (uses direction) and Teleports (use end tile)
+      // can both read what they need.
       if (!this.pendingStrategem) {
         this.pendingStrategem = { strategemType, owner, row, col };
         return;
       }
-      const center = this.pendingStrategem;
-      const dirCol = col - center.col;
-      const dirRow = row - center.row;
+      const start = this.pendingStrategem;
+      const dirCol = col - start.col;
+      const dirRow = row - start.row;
       const ss = this.strategemSystem;
       entity = ss.createStrategem(strategemType, {
         owner,
-        row: center.row,
-        col: center.col,
+        row: start.row,
+        col: start.col,
         dirCol: dirCol || (owner === "player1" ? 1 : -1),
         dirRow: dirRow,
+        endCol: col,
+        endRow: row,
       });
       this.pendingStrategem = null;
     } else {
@@ -247,6 +257,23 @@ class UIState {
     this.buildMode = null;
     this.strategemMode = null;
     this.pendingStrategem = null;
+    this._refreshDeckButtonHighlight();
+  }
+
+  /**
+   * Toggle spawn mode: pressing the same troop deselects; a different troop switches.
+   * Shared by keyboard hotkeys 1–4 and the deck button's click handler so mouse
+   * and keyboard behave identically.
+   */
+  toggleSpawnMode(owner, troopType) {
+    if (this.spawnMode &&
+        this.spawnMode.owner === owner &&
+        this.spawnMode.troopType === troopType) {
+      this.spawnMode = null;
+      this._refreshDeckButtonHighlight();
+    } else {
+      this.setSpawnMode(owner, troopType);
+    }
   }
 
   /**
@@ -259,18 +286,26 @@ class UIState {
     this.spawnMode = null;
     this.strategemMode = null;
     this.pendingStrategem = null;
+    this._refreshDeckButtonHighlight();
   }
 
   /**
-   * Set strategem mode for a player
+   * Set strategem mode for a player. Refused (silent) if the strategem is on
+   * cooldown — the user can re-click once the radial sweep clears.
    * @param {string} owner - Player ID
    * @param {string} strategemType - Strategem type
    */
   setStrategemMode(owner, strategemType) {
+    const def = (this.gameLogic.strategemTypes || {})[strategemType];
+    if (def && def.cooldown != null && this.strategemSystem
+        && !this.strategemSystem.isReady(owner, strategemType)) {
+      return;
+    }
     this.strategemMode = { owner, strategemType };
     this.spawnMode = null;
     this.buildMode = null;
     this.pendingStrategem = null;
+    this._refreshDeckButtonHighlight();
   }
 
   /**
@@ -281,6 +316,40 @@ class UIState {
     this.buildMode = null;
     this.strategemMode = null;
     this.pendingStrategem = null;
+    this._refreshDeckButtonHighlight();
+  }
+
+  _refreshDeckButtonHighlight() {
+    const container = document.getElementById("troopButtons");
+    if (!container) return;
+    const activeType = this.spawnMode ? this.spawnMode.troopType : null;
+    container.querySelectorAll("button").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.troopType === activeType);
+    });
+  }
+
+  _setupTroopHotkeys() {
+    const owned = new Set(["1", "2", "3", "4"]);
+    window.addEventListener("keydown", (e) => {
+      if (!owned.has(e.key)) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+
+      const gs = this.gameState;
+      if (!gs || gs.gameOver) return;
+
+      const localId = (window.networkingSystem && window.networkingSystem.getLocalPlayerId
+        && window.networkingSystem.getLocalPlayerId()) || "player1";
+      if (!gs.canPlayerAct(localId)) return;
+
+      const ds = window.deckSystem;
+      const deck = ds && ds.getPlayerDeck && ds.getPlayerDeck(localId);
+      const troopType = deck && deck.troops && deck.troops[parseInt(e.key, 10) - 1];
+      if (!troopType) return;
+
+      this.toggleSpawnMode(localId, troopType);
+    });
   }
 
   /**
