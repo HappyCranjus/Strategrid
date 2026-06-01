@@ -25,7 +25,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (window.gameSetupResult.audioManager) {
       window.gameSetupResult.audioManager.init();
-      window.gameSetupResult.audioManager.playMusic("game");
     }
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -34,6 +33,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (mode === "sandbox") {
       startSandbox();
+    } else if (mode === "pvc") {
+      startPvC();
     } else {
       window.gameState.setGameMode("pvp");
       setupMultiplayer(
@@ -78,6 +79,7 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
       gameState.paused = false;
       gameState.initialize();
       window.gameSetupResult.buildingSystem.placeInitialTurrets();
+      installPhaseTimerHUD();
       gameLoop.start();
 
       // Once decks are settled (deck sync arrives shortly after connect), populate deck buttons.
@@ -283,6 +285,174 @@ function buildDeckButtons(networkingSystem) {
   }
 }
 
+// ─── PvC (Player vs Computer) mode ───────────────────────────────────────────
+// Bypasses networking. Player1 = human (saved deck, normal HUD). Player2 = AI
+// driven by AIController with a random deck. Intermissions show a pick modal
+// to the human and silently grow the AI's deck. Intended for end-to-end
+// testing of deckbuilding, intermissions, and resource-pace escalation
+// without needing two browsers.
+
+function startPvC() {
+  const gs = window.gameState;
+  gs.setGameMode("pvc");
+  gs.initialize();
+  window.gameSetupResult.buildingSystem.placeInitialTurrets();
+
+  // Player2 gets a random deck per match. Direct assignment bypasses
+  // setPlayerDeck's PvP-network protection (which is gated on gameMode==="pvp"
+  // anyway, but assigning directly mirrors the sandbox pattern).
+  if (window.deckSystem) {
+    window.deckSystem.playerDecks["player2"] = window.deckSystem.randomDeck();
+  }
+
+  const ai = new AIController(
+    gs,
+    window.gameLogic,
+    window.deckSystem,
+    window.gameSetupResult.strategemSystem,
+    window.gameSetupResult.uiState
+  );
+  window.gameSetupResult.aiController = ai;
+
+  buildDeckButtons(null);
+  if (window.gameSetupResult.uiState) window.gameSetupResult.uiState.updateUIForDeck();
+
+  installIntermissionOverlay();
+  installPhaseTimerHUD();
+
+  window.gameSetupResult.gameLoop.start();
+}
+
+const PVC_DISPLAY_NAMES = {
+  swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
+  settler: "Settler", brute: "Brute", sentinel: "Sentinel",
+  wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
+  supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
+  chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
+  heal: "Heal Burst", wind: "Wind", necromancy: "Necromancy", ruin: "Ruin",
+  blast: "Blast", chainLightning: "Chain Lightning", gravityField: "Gravity Field",
+  lesserTeleport: "Lesser Teleport", greaterTeleport: "Greater Teleport",
+  chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
+};
+
+/**
+ * Watch the phase clock; on entry to intermission1/2, show a modal letting the
+ * human pick one new troop + one new strategem. On exit, auto-pick if the user
+ * didn't confirm so the test always exercises deck growth. Re-renders the deck
+ * button row after a pick (human or auto) so the new entries become usable.
+ */
+function installIntermissionOverlay() {
+  const gs = window.gameState;
+  const ds = window.deckSystem;
+  if (!gs || !ds) return;
+
+  const INTERMISSION_PHASES = new Set(["intermission1", "intermission2"]);
+  let lastPhase = null;
+  let confirmedThisRound = false;
+
+  setInterval(() => {
+    if (gs.gameOver) return;
+    const phase = gs.phase;
+    if (phase === lastPhase) return;
+
+    if (INTERMISSION_PHASES.has(phase)) {
+      confirmedThisRound = false;
+      showIntermissionModal(ds, () => { confirmedThisRound = true; });
+    } else if (INTERMISSION_PHASES.has(lastPhase)) {
+      if (!confirmedThisRound) autoPickIntermission(ds, "player1");
+      hideIntermissionModal();
+      buildDeckButtons(null);
+      if (window.gameSetupResult && window.gameSetupResult.uiState) {
+        window.gameSetupResult.uiState.updateUIForDeck();
+      }
+    }
+
+    lastPhase = phase;
+  }, 200);
+}
+
+function showIntermissionModal(ds, onConfirm) {
+  hideIntermissionModal();
+
+  const deck = ds.getPlayerDeck("player1");
+  const remainingTroops = ds.getAvailableTroops().filter((t) => !deck.troops.includes(t));
+  const remainingStrats = ds.getAvailableStrategems().filter((s) => !deck.strategems.includes(s));
+
+  const o = document.createElement("div");
+  o.id = "intermissionOverlay";
+  o.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,0.78);display:flex;align-items:center;" +
+    "justify-content:center;z-index:10000;color:#eee;font-family:sans-serif;";
+  o.innerHTML =
+    "<div style=\"background:#222;padding:20px 24px;border-radius:8px;min-width:480px;max-width:640px;\">" +
+      "<h2 style=\"margin:0 0 8px 0;\">Reinforcements</h2>" +
+      "<p style=\"color:#bbb;margin:0 0 16px 0;\">Pick one new troop and one new strategem. Intermission lasts 15s.</p>" +
+      "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:16px;\">" +
+        "<div><h4 style=\"color:#ccc;margin:0 0 8px 0;\">Troop</h4>" +
+        "<div id=\"intermTroopChoices\" style=\"display:flex;flex-wrap:wrap;gap:6px;\"></div></div>" +
+        "<div><h4 style=\"color:#ccc;margin:0 0 8px 0;\">Strategem</h4>" +
+        "<div id=\"intermStratChoices\" style=\"display:flex;flex-wrap:wrap;gap:6px;\"></div></div>" +
+      "</div>" +
+      "<div style=\"margin-top:16px;display:flex;justify-content:space-between;align-items:center;\">" +
+        "<span style=\"color:#888;font-size:12px;\">No pick → auto-chosen at the end of intermission.</span>" +
+        "<button id=\"intermConfirmBtn\" disabled style=\"padding:8px 16px;\">Confirm</button>" +
+      "</div>" +
+    "</div>";
+
+  document.body.appendChild(o);
+
+  const tBox = o.querySelector("#intermTroopChoices");
+  const sBox = o.querySelector("#intermStratChoices");
+  const confirmBtn = o.querySelector("#intermConfirmBtn");
+  let chosenTroop = null;
+  let chosenStrat = null;
+
+  const mkChoiceButton = (key, kind, container) => {
+    const b = document.createElement("button");
+    b.textContent = PVC_DISPLAY_NAMES[key] || key;
+    b.style.cssText =
+      "padding:6px 10px;background:#444;color:#eee;border:1px solid #555;" +
+      "border-radius:4px;cursor:pointer;font-family:inherit;";
+    b.dataset.key = key;
+    b.addEventListener("click", () => {
+      container.querySelectorAll("button").forEach((x) => (x.style.background = "#444"));
+      b.style.background = "#3a5";
+      if (kind === "troop") chosenTroop = key;
+      else chosenStrat = key;
+      confirmBtn.disabled = !(chosenTroop && chosenStrat);
+    });
+    container.appendChild(b);
+  };
+
+  for (const t of remainingTroops) mkChoiceButton(t, "troop", tBox);
+  for (const s of remainingStrats) mkChoiceButton(s, "strat", sBox);
+
+  confirmBtn.addEventListener("click", () => {
+    if (!(chosenTroop && chosenStrat)) return;
+    ds.addTroop("player1", chosenTroop);
+    ds.addStrategem("player1", chosenStrat);
+    hideIntermissionModal();
+    buildDeckButtons(null);
+    if (window.gameSetupResult && window.gameSetupResult.uiState) {
+      window.gameSetupResult.uiState.updateUIForDeck();
+    }
+    if (typeof onConfirm === "function") onConfirm();
+  });
+}
+
+function hideIntermissionModal() {
+  const o = document.getElementById("intermissionOverlay");
+  if (o && o.parentNode) o.parentNode.removeChild(o);
+}
+
+function autoPickIntermission(ds, player) {
+  const deck = ds.getPlayerDeck(player);
+  const remTroops = ds.getAvailableTroops().filter((t) => !deck.troops.includes(t));
+  const remStrats = ds.getAvailableStrategems().filter((s) => !deck.strategems.includes(s));
+  if (remTroops.length) ds.addTroop(player, remTroops[Math.floor(Math.random() * remTroops.length)]);
+  if (remStrats.length) ds.addStrategem(player, remStrats[Math.floor(Math.random() * remStrats.length)]);
+}
+
 // ─── Sandbox (dev) mode ──────────────────────────────────────────────────────
 // Bypasses networking, gives both players' decks side-by-side, and exposes a
 // debug panel for resources / pause / time-scale / restart. Used to play-test
@@ -301,9 +471,6 @@ function startSandbox() {
   gs.currentRP.player1 = gs.currentRP.player2 = 20;
   gs.currentTP.player1 = gs.currentTP.player2 = 10;
 
-  const phaseLabel = document.getElementById("phaseDisplay");
-  if (phaseLabel) phaseLabel.textContent = "Sandbox — both players controllable";
-
   // Both decks default to the saved local deck (or default); user can swap roster
   // by going back to the menu and editing the deck before re-launching.
   if (window.deckSystem) {
@@ -314,6 +481,7 @@ function startSandbox() {
 
   buildSandboxControls();
   buildDebugPanel();
+  installPhaseTimerHUD();
 
   window.gameSetupResult.gameLoop.start();
 }
@@ -584,4 +752,51 @@ function buildDebugPanel() {
       `P2=${gs.buildings.filter((b) => b.owner === "player2").length}<br>` +
       `Hero HP: P1=${gs.hero1 ? gs.hero1.hp.toFixed(0) : "—"} P2=${gs.hero2 ? gs.hero2.hp.toFixed(0) : "—"}`;
   }, 500);
+}
+
+// ─── Phase timer HUD ─────────────────────────────────────────────────────────
+// Drives #phaseDisplay + #phaseProgressBar from gs.phase / phaseDuration /
+// phaseTimeRemaining (stamped by phaseSystem each frame). 10Hz is smooth enough
+// for an m:ss countdown without burning frames.
+
+const PHASE_LABEL_INTERMISSION = new Set(["intermission1", "intermission2"]);
+
+function installPhaseTimerHUD() {
+  if (window._phaseTimerHUDInstalled) return;
+  window._phaseTimerHUDInstalled = true;
+  setInterval(updatePhaseHUD, 100);
+}
+
+function updatePhaseHUD() {
+  const gs = window.gameState;
+  if (!gs || gs.gameOver) return;
+  const label = document.getElementById("phaseDisplay");
+  const bar = document.getElementById("phaseProgressBar");
+  if (!label) return;
+
+  const duration = gs.phaseDuration || 0;
+  const remaining = gs.phaseTimeRemaining || 0;
+  const secs = Math.max(0, Math.ceil(remaining));
+  const mm = Math.floor(secs / 60);
+  const ss = String(secs % 60).padStart(2, "0");
+  const timeStr = `${mm}:${ss}`;
+
+  let title;
+  if (PHASE_LABEL_INTERMISSION.has(gs.phase)) {
+    title = `Intermission — ${timeStr}`;
+    label.classList.add("intermission-active");
+  } else if (gs.phase === "endgame") {
+    title = `Endgame — ${timeStr}`;
+    label.classList.remove("intermission-active");
+  } else {
+    title = `Countdown to Intermission — ${timeStr}`;
+    label.classList.remove("intermission-active");
+  }
+  label.textContent = title;
+
+  if (bar && duration > 0) {
+    const elapsed = duration - remaining;
+    const pct = Math.max(0, Math.min(100, (elapsed / duration) * 100));
+    bar.style.width = `${pct}%`;
+  }
 }

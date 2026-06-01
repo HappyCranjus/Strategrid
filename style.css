@@ -39,6 +39,7 @@ body {
 
 #phaseDisplayContainer { margin: 6px 0; text-align: center; }
 #phaseDisplay { font-size: 18px; color: #ff0; font-weight: bold; }
+#phaseDisplay.intermission-active { color: #6cf; }
 
 .resource-row {
   display: grid;
