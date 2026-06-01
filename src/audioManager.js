@@ -1,5 +1,5 @@
 /**
- * AudioManager - Manages game audio (SFX + looping music)
+ * AudioManager - Manages game audio (SFX only)
  * @class
  */
 
@@ -18,16 +18,12 @@ const troopSounds = {
 class AudioManager {
   constructor() {
     this.sounds = {};
-    this.music = {};
-    this.musicEnabled = true;
     this.soundEnabled = true;
     this.volume = 1.0;
     this._lastPlayed = {};
-    this._currentMusic = null;
-    this._pendingMusic = null;
   }
 
-  /** Load the full SFX + music set. Call once after construction. */
+  /** Load the full SFX set. Call once after construction. */
   init() {
     const sfx = {
       swordsmanActivation: "sounds/swordsmanActivation.mp3",
@@ -52,8 +48,6 @@ class AudioManager {
       divineWind: "sounds/divineWind.mp3",
     };
     for (const name in sfx) this.loadSound(name, sfx[name]);
-    this.loadMusic("menu", "sounds/menuMusic.wav");
-    this.loadMusic("game", "sounds/defaultGameMusic.wav");
   }
 
   /**
@@ -113,51 +107,9 @@ class AudioManager {
     this.playThrottled("deathSound", 60);
   }
 
-  /** Load a looping music track. */
-  loadMusic(name, path) {
-    const audio = new Audio(path);
-    audio.loop = true;
-    this.music[name] = audio;
-  }
-
-  _stopAllMusic() {
-    for (const k in this.music) this.music[k].pause();
-  }
-
-  /**
-   * Play a looping track. If autoplay is blocked, it starts on the first user
-   * gesture (pointer/key) instead.
-   * @param {string} name
-   */
-  playMusic(name) {
-    this._pendingMusic = name;
-    if (!this.musicEnabled) return;
-    this._stopAllMusic();
-    const m = this.music[name];
-    if (!m) return;
-    m.volume = this.volume * 0.5;
-    this._currentMusic = m;
-
-    const p = m.play();
-    if (p && p.catch) {
-      p.catch(() => {
-        const resume = () => {
-          window.removeEventListener("pointerdown", resume);
-          window.removeEventListener("keydown", resume);
-          if (this.musicEnabled && this._pendingMusic === name) m.play().catch(() => {});
-        };
-        window.addEventListener("pointerdown", resume, { once: true });
-        window.addEventListener("keydown", resume, { once: true });
-      });
-    }
-  }
-
-  /** Mute/unmute both SFX and music. */
+  /** Mute/unmute SFX. */
   setMuted(muted) {
     this.soundEnabled = !muted;
-    this.musicEnabled = !muted;
-    if (muted) this._stopAllMusic();
-    else if (this._pendingMusic) this.playMusic(this._pendingMusic);
   }
 }
 

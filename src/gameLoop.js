@@ -61,16 +61,19 @@ class GameLoop {
         phaseSystem, influenceSystem,
         troopSystem, buildingSystem, strategemSystem,
         renderer, resourceSystem, gameState, heroInput,
+        aiController,
       } = window.gameSetupResult;
       const gameOver = gameState && gameState.gameOver;
 
       if (!gameOver) {
         // Order matters: phase first (resource reads gs.phase), influence next
-        // (resource reads tile owners), then resource, then hero input (so
-        // hero positions are current before troop combat), then movement/combat.
+        // (resource reads tile owners), then resource, then AI (so it spends
+        // current-frame RP/TP), then hero input (so hero positions are current
+        // before troop combat), then movement/combat.
         if (phaseSystem) phaseSystem.update(deltaTime);
         if (influenceSystem) influenceSystem.update(deltaTime);
         if (resourceSystem) resourceSystem.update(deltaTime);
+        if (aiController) aiController.update(deltaTime);
         if (heroInput) heroInput.update(deltaTime);
         if (troopSystem) troopSystem.update(deltaTime);
         if (buildingSystem) buildingSystem.update(deltaTime);

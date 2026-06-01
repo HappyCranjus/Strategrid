@@ -31,6 +31,8 @@ class PhaseSystem {
       acc += p.duration;
       if (gs.matchTime < acc) {
         gs.phase = p.name;
+        gs.phaseDuration = p.duration;
+        gs.phaseTimeRemaining = Math.max(0, acc - gs.matchTime);
         return;
       }
     }
