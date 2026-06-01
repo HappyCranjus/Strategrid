@@ -13,6 +13,8 @@ class DeckSystem {
       "settler",
       "brute",
       "sentinel",
+      "bannerman",
+      "gustKnight",
     ];
 
     this.availableBuildings = [
@@ -41,11 +43,14 @@ class DeckSystem {
       "chronoStop",
     ];
 
-    // Default deck (4 troops, 2 buildings, 2 strategems)
+    this.availableHeroes = ["brickMcStick", "strategia"];
+
+    // Default deck (4 troops, 2 buildings, 2 strategems, 1 hero)
     this.defaultDeck = {
       troops: ["swordsman", "archer", "heavy", "militia"],
       strategems: ["heal", "blast"],
       buildings: ["farm", "cannon"],
+      hero: "brickMcStick",
     };
 
     // Player decks storage
@@ -154,6 +159,7 @@ class DeckSystem {
       troops: [...deck.troops],
       strategems: [...deck.strategems],
       buildings: [...deck.buildings],
+      hero: deck.hero,
     };
 
     this.saveDecks();
@@ -161,7 +167,9 @@ class DeckSystem {
   }
 
   /**
-   * Validate a deck
+   * Validate a deck. Troops and strategems use minimums (not exact counts) so
+   * the intermission-pick flow can grow a deck past its starting size without
+   * tripping validation. Buildings stay fixed at 2.
    * @param {Object} deck - Deck object to validate
    * @returns {boolean} - Valid status
    */
@@ -170,17 +178,14 @@ class DeckSystem {
       return false;
     }
 
-    // Must have exactly 4 troops
-    if (deck.troops.length !== 4) {
+    if (deck.troops.length < 4) {
       return false;
     }
 
-    // Must have exactly 2 strategems
-    if (deck.strategems.length !== 2) {
+    if (deck.strategems.length < 2) {
       return false;
     }
 
-    // Must have exactly 2 buildings
     if (deck.buildings.length !== 2) {
       return false;
     }
@@ -206,6 +211,11 @@ class DeckSystem {
       }
     }
 
+    // Hero must be set and valid
+    if (!deck.hero || !this.availableHeroes.includes(deck.hero)) {
+      return false;
+    }
+
     return true;
   }
 
@@ -219,15 +229,20 @@ class DeckSystem {
     if (this.playerDecks[player]) {
       return JSON.parse(JSON.stringify(this.playerDecks[player]));
     }
-    // Only return default deck if explicitly requested (for game start)
+    // Only return default deck if explicitly requested (for game start).
+    // Player 2's fallback uses the historical opponent hero so first-time
+    // matches still show both heroes on the field.
     if (useDefaultIfEmpty) {
-      return JSON.parse(JSON.stringify(this.defaultDeck));
+      const copy = JSON.parse(JSON.stringify(this.defaultDeck));
+      if (player === "player2") copy.hero = "strategia";
+      return copy;
     }
     // Return empty deck for deck builder UI
     return {
       troops: [],
       strategems: [],
       buildings: [],
+      hero: null,
     };
   }
 
@@ -289,6 +304,75 @@ class DeckSystem {
   }
 
   /**
+   * Get all available heroes
+   * @returns {Array<string>}
+   */
+  getAvailableHeroes() {
+    return [...this.availableHeroes];
+  }
+
+  /**
+   * Generate a random valid deck: 4 unique troops, 2 unique strategems,
+   * 2 unique buildings, each drawn from the available rosters. Used by PvC
+   * mode to give the AI a fresh deck per match.
+   * @returns {Object}
+   */
+  randomDeck() {
+    const pickN = (pool, n) => {
+      const copy = [...pool];
+      const out = [];
+      for (let i = 0; i < n && copy.length > 0; i++) {
+        const idx = Math.floor(Math.random() * copy.length);
+        out.push(copy.splice(idx, 1)[0]);
+      }
+      return out;
+    };
+    return {
+      troops: pickN(this.availableTroops, 4),
+      strategems: pickN(this.availableStrategems, 2),
+      buildings: pickN(this.availableBuildings, 2),
+      hero: this.availableHeroes[Math.floor(Math.random() * this.availableHeroes.length)],
+    };
+  }
+
+  /**
+   * Append a troop to a player's deck. Used by the intermission-pick flow.
+   * Silently no-ops if the troop is unknown or already present (decks are
+   * unique-set semantics, not multiset). Mutates the in-memory deck only;
+   * never persists, so intermission picks can't bloat the saved base deck.
+   */
+  addTroop(player, troopType) {
+    if (!this.availableTroops.includes(troopType)) return false;
+    const deck = this.playerDecks[player];
+    if (!deck) return false;
+    if (deck.troops.includes(troopType)) return false;
+    deck.troops.push(troopType);
+    return true;
+  }
+
+  /**
+   * Append a strategem to a player's deck. Same semantics as addTroop:
+   * in-memory only, never persisted.
+   */
+  addStrategem(player, strategemType) {
+    if (!this.availableStrategems.includes(strategemType)) return false;
+    const deck = this.playerDecks[player];
+    if (!deck) return false;
+    if (deck.strategems.includes(strategemType)) return false;
+    deck.strategems.push(strategemType);
+    return true;
+  }
+
+  /**
+   * Re-hydrate the in-memory playerDecks from localStorage so the next match
+   * starts from the pristine saved base, not from the intermission-mutated
+   * state of the previous match. Idempotent.
+   */
+  resetMatchState() {
+    this.loadDecks();
+  }
+
+  /**
    * Save decks to localStorage
    */
   saveDecks() {
@@ -324,6 +408,12 @@ class DeckSystem {
         const loaded = JSON.parse(saved);
         // Validate loaded decks
         for (const player in loaded) {
+          // Backwards-compat: pre-hero saves get the historical default hero
+          // before validation, so legacy decks still load instead of being
+          // silently discarded by the new hero-required validation rule.
+          if (loaded[player] && !loaded[player].hero) {
+            loaded[player].hero = "brickMcStick";
+          }
           if (this.validateDeck(loaded[player])) {
             // In PvP mode, don't overwrite player2's deck if it's already been set (e.g., from network)
             // This prevents localStorage from overwriting player2's deck that was received from the client

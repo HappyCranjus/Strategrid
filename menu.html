@@ -32,6 +32,7 @@
 
     <button class="menu-btn" id="btnPvPRoomCode">PvP (Room Code)</button>
     <button class="menu-btn" id="btnPvPOpen">PvP (Open Matchmaking)</button>
+    <button class="menu-btn" id="btnPvC" style="background:#36a">Play vs Computer</button>
     <button class="menu-btn" id="btnSandbox" style="background:#3a5">Sandbox (Dev)</button>
 
     <div id="deckBuildingSection" style="margin-top: 30px; width: 480px; max-width: 95vw; text-align: left;">
@@ -58,6 +59,13 @@
         <div id="deckStrategemsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
       </div>
 
+      <div style="margin-bottom: 15px;">
+        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
+          Select 1 Hero: <span id="deckHeroCount">0</span>/1
+        </h4>
+        <div id="deckHeroSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+      </div>
+
       <button id="saveDeckBtn" style="padding: 8px 16px; margin-top: 10px;">Save Deck</button>
       <div id="deckSaveStatus" style="margin-top: 5px; font-size: 12px; display: none;"></div>
     </div>
@@ -69,7 +77,9 @@
 
         const displayNames = {
           swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
-          settler: "Settler", brute: "Brute", sentinel: "Sentinel",
+          settler: "Settler", brute: "Brute", sentinel: "Sentinel", bannerman: "Bannerman",
+          gustKnight: "Gust Knight",
+          brickMcStick: "Brick McStick", strategia: "Strategia",
           wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
           supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
           chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
@@ -92,7 +102,9 @@
             btn.textContent = displayNames[key] || key;
             btn.dataset.key = key;
 
-            if ((savedDeck[category] || []).includes(key)) btn.classList.add("selected");
+            const sel = savedDeck[category];
+            const isSaved = Array.isArray(sel) ? sel.includes(key) : sel === key;
+            if (isSaved) btn.classList.add("selected");
 
             btn.addEventListener("click", () => {
               const isSelected = btn.classList.contains("selected");
@@ -114,19 +126,22 @@
         createButtons(document.getElementById("deckTroopsSelection"), window.deckSystem.getAvailableTroops(), "troops", 4, "deckTroopsCount");
         createButtons(document.getElementById("deckBuildingsSelection"), window.deckSystem.getAvailableBuildings(), "buildings", 2, "deckBuildingsCount");
         createButtons(document.getElementById("deckStrategemsSelection"), window.deckSystem.getAvailableStrategems(), "strategems", 2, "deckStrategemsCount");
+        createButtons(document.getElementById("deckHeroSelection"), window.deckSystem.getAvailableHeroes(), "hero", 1, "deckHeroCount");
 
         const saveBtn = document.getElementById("saveDeckBtn");
         const saveStatus = document.getElementById("deckSaveStatus");
         if (saveBtn) {
           saveBtn.addEventListener("click", () => {
+            const heroBtns = document.getElementById("deckHeroSelection").querySelectorAll(".selected");
             const deck = {
               troops: [...document.getElementById("deckTroopsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
               buildings: [...document.getElementById("deckBuildingsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
               strategems: [...document.getElementById("deckStrategemsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
+              hero: heroBtns.length > 0 ? heroBtns[0].dataset.key : null,
             };
             const ok = window.deckSystem.setPlayerDeck("player1", deck);
             if (saveStatus) {
-              saveStatus.textContent = ok ? "Deck saved!" : "Invalid deck — need 4 troops, 2 buildings, 2 strategems.";
+              saveStatus.textContent = ok ? "Deck saved!" : "Invalid deck — need 4 troops, 2 buildings, 2 strategems, 1 hero.";
               saveStatus.style.color = ok ? "#4caf50" : "#f44336";
               saveStatus.style.display = "block";
               setTimeout(() => (saveStatus.style.display = "none"), 2500);
@@ -159,23 +174,15 @@
             window.location.href = "game.html?mode=sandbox";
           });
         }
+        const btnPvC = document.getElementById("btnPvC");
+        if (btnPvC) {
+          btnPvC.addEventListener("click", (e) => {
+            e.preventDefault();
+            window.location.href = "game.html?mode=pvc";
+          });
+        }
       });
     </script>
 
-    <script>
-      // Looping menu music — starts on the first user interaction (browsers block autoplay until then).
-      (function () {
-        const music = new Audio("sounds/menuMusic.wav");
-        music.loop = true;
-        music.volume = 0.5;
-        const start = () => {
-          window.removeEventListener("pointerdown", start);
-          window.removeEventListener("keydown", start);
-          music.play().catch(() => {});
-        };
-        window.addEventListener("pointerdown", start, { once: true });
-        window.addEventListener("keydown", start, { once: true });
-      })();
-    </script>
   </body>
 </html>

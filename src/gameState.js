@@ -34,6 +34,8 @@ class GameState {
     this.paused = false;
     this.phase = "opening"; // opening, intermission1, assault, intermission2, endgame
     this.matchTime = 0;
+    this.phaseDuration = 0;
+    this.phaseTimeRemaining = 0;
 
     // Hero refs — populated by initialize() once GameLogic is available.
     // hero1 is Brick McStick (player1); hero2 is Strategia (player2). Both
@@ -63,6 +65,8 @@ class GameState {
     this.maxTP    = { player1: 5,  player2: 5 };
     this.phase = "opening";
     this.matchTime = 0;
+    this.phaseDuration = 0;
+    this.phaseTimeRemaining = 0;
     this.paused = false;
     this.currentPlayer = "player1";
     this.gameOver = false;
@@ -76,6 +80,10 @@ class GameState {
         this.grid[row][col] = { type: "empty", influence: 0, owner: null };
       }
     }
+    // Re-hydrate decks from localStorage so intermission picks from a prior
+    // match (which mutate the in-memory deck but never persist) don't bleed
+    // into this match's starting deck. Safe to call on first init too.
+    if (window.deckSystem) window.deckSystem.resetMatchState();
     this._applyStartingLayout();
     this._spawnHeroes();
   }
@@ -84,17 +92,25 @@ class GameState {
    * Spawn each player's Hero where their tower used to stand. Heroes are
    * normal troops with isHero=true, so they get auto-attack, collision, and
    * sprite rendering for free. Cached on hero1/hero2 for O(1) access.
+   * Hero choice comes from each player's deck; falls back to the historical
+   * matchup (Brick vs Strategia) when no deck system is in scope.
    */
   _spawnHeroes() {
     const logic = (window.gameSetupResult && window.gameSetupResult.gameLogic)
       || new GameLogic();
+    const ds = window.deckSystem;
+    const heroFor = (player, fallback) => {
+      if (!ds) return fallback;
+      const deck = ds.getPlayerDeck(player, true);
+      return (deck && deck.hero) || fallback;
+    };
     const midRow = Math.floor(this.rows / 2);
     // Troop coordinate convention: renderer draws sprite center at
     // (col + 0.5) * tileSize, so col=0.5 puts a 2-tile-wide hero sprite
     // flush against the LEFT wall and col=cols-1.5 puts it flush RIGHT.
     // These spawn values give each hero a sprite-flush back-wall start.
-    this.hero1 = logic.createTroop("brickMcStick", midRow, 0.5,             "player1");
-    this.hero2 = logic.createTroop("strategia",    midRow, this.cols - 1.5, "player2");
+    this.hero1 = logic.createTroop(heroFor("player1", "brickMcStick"), midRow, 0.5,             "player1");
+    this.hero2 = logic.createTroop(heroFor("player2", "strategia"),    midRow, this.cols - 1.5, "player2");
     if (this.hero1) { this.hero1.active = true; this.troops.push(this.hero1); }
     if (this.hero2) { this.hero2.active = true; this.troops.push(this.hero2); }
   }
@@ -168,6 +184,7 @@ class GameState {
    */
   canPlayerAct(player) {
     if (this.gameMode === "sandbox") return true; // dev mode: control both sides
+    if (this.gameMode === "pvc") return player === "player1"; // human is P1; AI drives P2 headlessly
     if (this.gameMode === "pvp") {
       if (window.networkingSystem) {
         return window.networkingSystem.getLocalPlayerId() === player;
