@@ -7,6 +7,16 @@ class GameState {
     this.troops = [];
     this.buildings = [];
     this.strategems = [];
+    // Per-strategem-type cooldown timers (seconds remaining), keyed by owner.
+    // Decremented each frame by strategemSystem; cast attempts gate on > 0.
+    this.strategemCooldowns = { player1: {}, player2: {} };
+    // Per-hero-type ability cooldown timers (seconds remaining), keyed by owner.
+    // Same shape and lifecycle as strategemCooldowns; ticked by strategemSystem.
+    this.heroAbilityCooldowns = { player1: {}, player2: {} };
+    // Troops that died this frame — populated by troopSystem at the death
+    // sweep, read by strategemSystem (Necromancy raises on enemy deaths inside
+    // its zone). Cleared at the start of each troopSystem.update().
+    this.deathsThisFrame = [];
     // Floating damage popups: { col, row, dmg, spawnTime } — spawned by
     // applyDamage when a hero or tower turret is hit, GC'd by troopSystem.
     this.damagePopups = [];
@@ -43,6 +53,9 @@ class GameState {
     this.troops = [];
     this.buildings = [];
     this.strategems = [];
+    this.strategemCooldowns = { player1: {}, player2: {} };
+    this.heroAbilityCooldowns = { player1: {}, player2: {} };
+    this.deathsThisFrame = [];
     this.damagePopups = [];
     this.currentRP = { player1: 5, player2: 5 };
     this.currentTP = { player1: 3, player2: 3 };
@@ -192,6 +205,8 @@ class GameState {
       troops: this.troops,
       buildings: this.buildings,
       strategems: this.strategems,
+      strategemCooldowns: this.strategemCooldowns,
+      heroAbilityCooldowns: this.heroAbilityCooldowns,
       currentRP: this.currentRP,
       currentTP: this.currentTP,
       maxRP: this.maxRP,
@@ -221,6 +236,8 @@ class GameState {
     if (state.troops) this.troops = state.troops;
     if (state.buildings) this.buildings = state.buildings;
     if (state.strategems) this.strategems = state.strategems;
+    if (state.strategemCooldowns) this.strategemCooldowns = state.strategemCooldowns;
+    if (state.heroAbilityCooldowns) this.heroAbilityCooldowns = state.heroAbilityCooldowns;
     if (state.currentRP) this.currentRP = state.currentRP;
     if (state.currentTP) this.currentTP = state.currentTP;
     if (state.maxRP) this.maxRP = state.maxRP;

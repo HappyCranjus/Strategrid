@@ -15,9 +15,12 @@ class HeroInput {
     this.keys = new Set();
 
     // Keys we own — preventDefault on these so arrow keys don't scroll the page.
+    // SPACE fires the local player's hero ability (P1 in sandbox / local in PvP);
+    // ENTER fires P2's hero ability in sandbox (no PvP role).
     const owned = new Set([
       "w", "a", "s", "d",
       "arrowup", "arrowleft", "arrowdown", "arrowright",
+      " ", "enter",
     ]);
 
     const onDown = (e) => {
@@ -26,6 +29,27 @@ class HeroInput {
       // Don't steal keys from text inputs (e.g. PvP room-code field).
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+
+      // Edge-triggered casts: don't push SPACE/ENTER into the held-key set
+      // (the movement loop ignores them); instead fire once on the down edge.
+      if (k === " " || k === "enter") {
+        if (e.repeat) { if (e.preventDefault) e.preventDefault(); return; }
+        const ss = window.strategemSystem;
+        if (ss && ss.tryActivateHeroAbility) {
+          const mode = this.gameState && this.gameState.gameMode;
+          if (k === " ") {
+            const owner = (mode === "pvp" && window.networkingSystem && window.networkingSystem.getLocalPlayerId)
+              ? window.networkingSystem.getLocalPlayerId()
+              : "player1";
+            ss.tryActivateHeroAbility(owner);
+          } else if (k === "enter" && mode === "sandbox") {
+            ss.tryActivateHeroAbility("player2");
+          }
+        }
+        if (e.preventDefault) e.preventDefault();
+        return;
+      }
+
       this.keys.add(k);
       if (e.preventDefault) e.preventDefault();
     };

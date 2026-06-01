@@ -12,6 +12,7 @@ const troopSpriteFiles = {
   settler:      { player1: "blueSettler.jpg",   player2: "redSettler.jpg" },
   sentinel:     { player1: "blueSentinel.jpg",  player2: "redSentinel.jpg" },
   brute:        { player1: "blueBrute.jpg",     player2: "redBrute2.png" },
+  skeleton:     { player1: "Blue_Skeleton.png", player2: "Red_Skeleton.png" },
   brickMcStick: { player1: "BrickMcStick_Blue.png", player2: "BrickMcStick_Red.png" },
   strategia:    { player1: "Strategia_Blue.png",    player2: "Strategia_Red.png" },
 };
@@ -27,13 +28,15 @@ class Renderer {
 
     // Color lookup for building types
     this.buildingColors = {
-      wall:          "#888888",
-      farm:          "#6b8e23",
-      archerTower:   "#8a2be2",
-      sniperOutpost: "#4169e1",
-      warCamp:       "#8b4513",
-      missileSilo:   "#cc3300",
-      towerTurret:   "#5a6578",
+      wall:            "#888888",
+      farm:            "#6b8e23",
+      cannon:          "#5a3a2a",
+      bunker:          "#4a4a4a",
+      supplyDepot:     "#c08040",
+      warBonesFactory: "#dcdcdc",
+      chillTurret:     "#a0d8ff",
+      lavaMortar:      "#cc3300",
+      towerTurret:     "#5a6578",
     };
 
     // Color lookup for troop types
@@ -138,6 +141,7 @@ class Renderer {
       this.drawDamagePopups(gs);
       this.drawTargetingLines(gs);
       this._drawCursorPreview(gs);
+      this._drawStrategemCooldowns(gs);
 
       if (gs.gameOver) {
         const { ctx } = this;
@@ -237,6 +241,51 @@ class Renderer {
       ctx.fillStyle = hpFrac > 0.5 ? "#4caf50" : hpFrac > 0.25 ? "#ff9800" : "#f44336";
       ctx.fillRect(x, y - 5, w * hpFrac, 3);
 
+      // Attack cooldown bar for attack-capable buildings (Cannon, Chill
+      // Turret, Lava Mortar, Tower Turret). Sits immediately above the HP
+      // bar. Skipped for Wall / Farm / Bunker / Supply Depot / War Bones
+      // Factory (no attackCooldown on their def).
+      const bDef = (window.buildingTypes || {})[b.type];
+      if (bDef && bDef.attackCooldown != null) {
+        const cdH = 2;
+        const cdY = y - 5 - cdH - 1;
+        const cdFrac = Math.max(0, Math.min(1, (b.attackTimer || 0) / bDef.attackCooldown));
+        ctx.fillStyle = "#333";
+        ctx.fillRect(x, cdY, w, cdH);
+        const ready = cdFrac >= 1;
+        ctx.fillStyle = ready ? "#ffe082" : "#ffb74d";
+        ctx.fillRect(x, cdY, w * cdFrac, cdH);
+        if (ready) {
+          ctx.strokeStyle = "rgba(255, 240, 180, 0.9)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, cdY, w, cdH);
+        }
+      }
+
+      // Bunker garrison slots: two stacked dots, colored by occupant troop
+      // type so the player can read at a glance who's inside. Empty slots
+      // show as a dim well. Sits inside the 1x2 footprint (one dot per row).
+      if (b.type === "bunker") {
+        const slotColors = {
+          archer: "#f0e090",
+          sentinel: "#a0d8a0",
+        };
+        const dotR = ts * 0.18;
+        const slots = (window.buildingTypes && window.buildingTypes.bunker && window.buildingTypes.bunker.garrisonSlots) || 2;
+        for (let i = 0; i < slots; i++) {
+          const dotX = x + w / 2;
+          const dotY = y + ts * (0.5 + i);
+          const occ = b.occupants && b.occupants[i];
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+          ctx.fillStyle = occ ? (slotColors[occ.type] || "#cccccc") : "#1f1f1f";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(0,0,0,0.85)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
       // Tower Turrets print their current HP centered in the cell so the
       // player can read damage taken at a glance without eyeballing the
       // 3px bar. Incoming damage shows via floating popups, not a stat.
@@ -264,6 +313,16 @@ class Renderer {
     const r = ts * 0.35;
 
     for (const t of gs.troops) {
+      // Garrisoned troops live "inside" their bunker — the bunker's slot dots
+      // represent them. Teleporting troops are out of phase entirely.
+      // Skip the entire on-field render block in either case. Cloaked
+      // (Strategia's Ambush) is also `invisible: true` but renders translucent
+      // so the player can still see the silhouette as it moves.
+      if (t.garrisonedIn) continue;
+      if (t.invisible && !t.cloakActive) continue;
+      const cloakAlpha = (t.invisible && t.cloakActive) ? 0.35 : 1.0;
+      ctx.save();
+      ctx.globalAlpha = cloakAlpha;
       const cx = (t.col + 0.5) * ts;
       const cy = (t.row + 0.5) * ts;
       const inactive = t.active === false;
@@ -311,6 +370,25 @@ class Renderer {
         ctx.stroke();
       }
 
+      // Chill stack visual: blue ring whose alpha scales with stack count.
+      // Frozen troops get a saturated white-blue overlay during the 1s freeze.
+      const now = performance.now() / 1000;
+      const frozen = t.frozenUntil && t.frozenUntil > now;
+      const stacks = t.chillStacks || 0;
+      if (stacks > 0 || frozen) {
+        const ringR = auraR * 1.05;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+        if (frozen) {
+          ctx.strokeStyle = "rgba(220, 240, 255, 0.95)";
+          ctx.lineWidth = 3;
+        } else {
+          ctx.strokeStyle = `rgba(120, 200, 255, ${Math.min(1, 0.25 + stacks / 80 * 0.75)})`;
+          ctx.lineWidth = 2;
+        }
+        ctx.stroke();
+      }
+
       // HP bar — heroes get a wider bar so the bigger HP pool reads clearly.
       const hpFrac = t.hp / t.maxHP;
       const barHalf = isHero ? auraR : r;
@@ -320,6 +398,31 @@ class Renderer {
       ctx.fillRect(cx - barHalf, barY, barHalf * 2, barH);
       ctx.fillStyle = hpFrac > 0.5 ? "#4caf50" : "#f44336";
       ctx.fillRect(cx - barHalf, barY, barHalf * 2 * hpFrac, barH);
+
+      // Attack cooldown bar — sits immediately above the HP bar. Fills as
+      // attackTimer climbs to attackInterval; brightens when ready to fire.
+      // chill/haste/slow mirror troopSystem so the bar fills at the actual
+      // attack rate. Skipped for utility units (Settler).
+      if (t.attackSpeed > 0) {
+        const cdY = barY - barH - 1;
+        const slowedT = t.slowUntil  && t.slowUntil  > now;
+        const hastedT = t.hasteUntil && t.hasteUntil > now;
+        const slowAtkT  = slowedT ? (t.slowAttackFactor  || 1) : 1;
+        const hasteAtkT = hastedT ? (t.hasteAttackFactor || 1) : 1;
+        const chillMul = Math.max(0.2, 1 - 0.01 * (t.chillStacks || 0));
+        const attackInterval = 1 / (t.attackSpeed * slowAtkT * hasteAtkT * chillMul);
+        const cdFrac = Math.max(0, Math.min(1, (t.attackTimer || 0) / attackInterval));
+        ctx.fillStyle = "#333";
+        ctx.fillRect(cx - barHalf, cdY, barHalf * 2, barH);
+        const ready = cdFrac >= 1;
+        ctx.fillStyle = ready ? "#ffe082" : "#ffb74d";
+        ctx.fillRect(cx - barHalf, cdY, barHalf * 2 * cdFrac, barH);
+        if (ready) {
+          ctx.strokeStyle = "rgba(255, 240, 180, 0.9)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(cx - barHalf, cdY, barHalf * 2, barH);
+        }
+      }
 
       // Heroes: print current HP centered below the bar so the player can
       // read it during combat. Incoming damage shows via floating popups.
@@ -359,6 +462,25 @@ class Renderer {
         ctx.textAlign = "start";
         ctx.textBaseline = "alphabetic";
       }
+
+      // Chill stack count: numeric label above the aura. Shown when chilled
+      // or frozen so the player can read the exact stack count (the ring
+      // already shows the ambient signal; this gives them the precise value).
+      if (stacks > 0 || frozen) {
+        const labelY = cy - auraR - 4;
+        const chillLabel = "❄" + stacks;
+        ctx.font = "bold " + Math.round(ts * 0.28) + "px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(chillLabel, cx, labelY);
+        ctx.fillStyle = frozen ? "#e0f4ff" : "#88ccff";
+        ctx.fillText(chillLabel, cx, labelY);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+      }
+      ctx.restore();
     }
   }
 
@@ -399,37 +521,30 @@ class Renderer {
     const { ctx } = this;
     const ts = gs.tileSize;
     if (!gs.strategems || !gs.strategems.length) return;
+    const defs = (window.strategemTypes || {});
 
     for (const s of gs.strategems) {
       const cx = (s.col + 0.5) * ts;
       const cy = (s.row + 0.5) * ts;
+      const def = defs[s.type] || {};
       switch (s.type) {
         case "heal": {
-          // Pulse: brighter on age phases 0.0-0.5 / 2.0-2.5 / 4.0-4.5 / 6.0-6.5
-          const phase = s.age % 2;
-          const onPhase = phase < 1;
-          const pulse = onPhase ? (0.35 + 0.25 * Math.sin(phase * Math.PI * 4)) : 0.18;
+          // Pulse on the 7 heal-pulse ages (every 0.5s for 3.5s).
+          const phase = (s.age * 2) % 1;
+          const pulse = 0.32 + 0.22 * Math.cos(phase * Math.PI * 2);
+          const r = (def.radius || 3) * ts;
           ctx.beginPath();
-          ctx.arc(cx, cy, 3 * ts, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(124, 255, 124, ${pulse})`;
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(124, 255, 124, ${pulse * 0.5})`;
           ctx.fill();
-          ctx.strokeStyle = "rgba(80, 200, 80, 0.7)";
+          ctx.strokeStyle = "rgba(80, 200, 80, 0.85)";
           ctx.lineWidth = 1.5;
           ctx.stroke();
           break;
         }
-        case "blizzard": {
-          ctx.beginPath();
-          ctx.arc(cx, cy, 5 * ts, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(160, 216, 255, 0.22)";
-          ctx.fill();
-          ctx.strokeStyle = "rgba(120, 180, 240, 0.7)";
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          break;
-        }
-        case "divineWind": {
-          const len = 8 * ts, wid = 4 * ts;
+        case "wind": {
+          const len = (def.length || 8) * ts;
+          const wid = (def.width  || 4) * ts;
           const ang = Math.atan2(s.dirRow, s.dirCol);
           ctx.save();
           ctx.translate(cx, cy);
@@ -439,7 +554,6 @@ class Renderer {
           ctx.strokeStyle = "rgba(110, 170, 220, 0.8)";
           ctx.lineWidth = 1.5;
           ctx.strokeRect(-len / 2, -wid / 2, len, wid);
-          // Arrow indicating direction
           ctx.fillStyle = "rgba(255,255,255,0.85)";
           ctx.beginPath();
           ctx.moveTo(len / 2 - 8, -6);
@@ -448,6 +562,65 @@ class Renderer {
           ctx.closePath();
           ctx.fill();
           ctx.restore();
+          break;
+        }
+        case "necromancy": {
+          const r = (def.radius || 6) * ts;
+          // Dim greenish-purple disk + faint swirling ring.
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(70, 30, 90, 0.18)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(160, 100, 200, 0.55)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // Tombstone glyph at center.
+          const tw = ts * 0.55, th = ts * 0.85;
+          ctx.fillStyle = "rgba(60, 60, 70, 0.95)";
+          ctx.beginPath();
+          ctx.moveTo(cx - tw / 2, cy + th / 2);
+          ctx.lineTo(cx - tw / 2, cy - th / 3);
+          ctx.quadraticCurveTo(cx - tw / 2, cy - th / 2, cx, cy - th / 2);
+          ctx.quadraticCurveTo(cx + tw / 2, cy - th / 2, cx + tw / 2, cy - th / 3);
+          ctx.lineTo(cx + tw / 2, cy + th / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "rgba(0,0,0,0.85)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // RIP marker.
+          ctx.font = "bold " + Math.round(ts * 0.22) + "px serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "rgba(200, 200, 220, 0.9)";
+          ctx.fillText("R.I.P", cx, cy - th / 8);
+          ctx.textAlign = "start";
+          ctx.textBaseline = "alphabetic";
+          break;
+        }
+        case "ruin": {
+          const r = (def.radius || 1.5) * ts;
+          const at = def.activationTime != null ? def.activationTime : 4;
+          const frac = Math.min(1, s.age / at);
+          // Ramp red intensity as the strike approaches; final 0.25s flashes.
+          const flashing = s.age >= at - 0.25;
+          const fill = flashing
+            ? `rgba(255, 80, 40, ${0.45 + 0.25 * Math.sin(s.age * 30)})`
+            : `rgba(180, 80, 40, ${0.12 + 0.25 * frac})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = fill;
+          ctx.fill();
+          ctx.strokeStyle = flashing ? "rgba(255, 220, 80, 0.95)" : `rgba(200, 120, 60, ${0.5 + 0.5 * frac})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          // Crosshair so the cast tile reads precisely.
+          ctx.strokeStyle = "rgba(255, 220, 200, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+          ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+          ctx.stroke();
           break;
         }
         case "blast": {
@@ -460,7 +633,357 @@ class Renderer {
           ctx.strokeRect(s.col * ts, s.row * ts, ts, ts);
           break;
         }
+        case "chainLightning": {
+          // Hot-pink ring marker that subtly pulses.
+          const ringR = ts * 0.4 * (1 + 0.08 * Math.sin(s.age * 6));
+          ctx.beginPath();
+          ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255, 64, 192, 0.95)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = "rgba(255, 64, 192, 0.18)";
+          ctx.fill();
+          // Polyline through the most recent strike's victims, fading over 0.3s.
+          if (s.lastHits && s.lastHits.length && s.lastHitsAge < 0.3) {
+            const a = 1 - (s.lastHitsAge / 0.3);
+            ctx.save();
+            ctx.strokeStyle = `rgba(255, 96, 220, ${a})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            const sx = (s.col + 0.5) * ts;
+            const sy = (s.row + 0.5) * ts;
+            ctx.moveTo(sx, sy);
+            for (const [hc, hr] of s.lastHits) {
+              ctx.lineTo((hc + 0.5) * ts, (hr + 0.5) * ts);
+            }
+            ctx.stroke();
+            ctx.restore();
+          }
+          break;
+        }
+        case "gravityField": {
+          const r = (def.radius || 4) * ts;
+          // Three concentric rings rotating, getting tighter toward center.
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(s.age * 1.2);
+          ctx.fillStyle = "rgba(40, 60, 120, 0.20)";
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          for (let i = 0; i < 3; i++) {
+            const rr = r * (0.85 - i * 0.25);
+            ctx.strokeStyle = `rgba(120, 160, 255, ${0.5 - i * 0.12})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, rr, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          // Dark singularity point.
+          ctx.fillStyle = "rgba(0,0,0,0.85)";
+          ctx.beginPath();
+          ctx.arc(0, 0, ts * 0.12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          break;
+        }
+        case "lesserTeleport":
+        case "greaterTeleport": {
+          this._drawTeleportRunes(gs, s, def, s.type === "greaterTeleport" ? (def.zoneRadius || 1) : 0);
+          break;
+        }
+        case "chronoHaste":
+        case "chronoSlow":
+        case "chronoStop": {
+          this._drawChronoClock(gs, s, def);
+          break;
+        }
+        case "_heroBurst": {
+          // Transient flash spawned by a hero ability cast. Radial glow that
+          // expands and fades over the 0.4s lifetime. Color carries the
+          // ability identity (Brick=amber, Strategia=violet).
+          const frac = Math.min(1, s.age / (s.duration || 0.4));
+          const r = ((s.radius || 1) + 0.5) * ts * (0.4 + 0.9 * frac);
+          const alpha = 1 - frac;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          const col = s.color || "#ffb050";
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          grad.addColorStop(0, this._hexWithAlpha(col, 0.85 * alpha));
+          grad.addColorStop(1, this._hexWithAlpha(col, 0));
+          ctx.fillStyle = grad;
+          ctx.fill();
+          ctx.strokeStyle = this._hexWithAlpha(col, 0.9 * alpha);
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+          break;
+        }
+        case "burningPatch": {
+          // Lingering fire AoE from Lava Mortar. Pulsing inner glow + ring.
+          const bpDef = (window.strategemTypes && window.strategemTypes.burningPatch) || {};
+          const r = (s.radius != null ? s.radius : (bpDef.radius || 2)) * ts;
+          const pulse = 0.55 + 0.20 * Math.sin(s.age * 6);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 96, 32, ${0.22 * pulse})`;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 160, 60, 0.8)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          break;
+        }
       }
+    }
+  }
+
+  /**
+   * Teleport visual: a fading-in rune at the start (or 3×3 of runes) that
+   * brightens as activationTime approaches, then a brightening rune at the
+   * end during the appear delay, then a brief beam at arrival.
+   */
+  _drawTeleportRunes(gs, s, def, zoneRadius) {
+    const { ctx } = this;
+    const ts = gs.tileSize;
+    const at = def.activationTime != null ? def.activationTime : 4;
+    const appear = at + (def.appearDelay != null ? def.appearDelay : 0.5);
+
+    const drawRune = (centerCol, centerRow, alpha, accent) => {
+      const rx = (centerCol + 0.5) * ts;
+      const ry = (centerRow + 0.5) * ts;
+      const r = ts * 0.4;
+      ctx.save();
+      ctx.translate(rx, ry);
+      ctx.rotate(s.age * 1.5);
+      ctx.strokeStyle = `rgba(180, 100, 255, ${alpha * 0.95})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Inner spokes
+      ctx.strokeStyle = `rgba(220, 160, 255, ${alpha * 0.85})`;
+      for (let k = 0; k < 6; k++) {
+        const a = (k * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35);
+        ctx.lineTo(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.9);
+        ctx.stroke();
+      }
+      if (accent) {
+        ctx.fillStyle = `rgba(255, 220, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    const drawZone = (cc, rr, alpha, accent) => {
+      for (let dr = -zoneRadius; dr <= zoneRadius; dr++) {
+        for (let dc = -zoneRadius; dc <= zoneRadius; dc++) {
+          drawRune(cc + dc, rr + dr, alpha, accent);
+        }
+      }
+    };
+
+    // Start side: alpha ramps 0 → 1 across the 0..at window, holds until appear.
+    let startAlpha;
+    if (s.age < at) startAlpha = Math.min(1, s.age / at);
+    else if (s.age < appear) startAlpha = 1.0 - (s.age - at) / (appear - at);
+    else startAlpha = 0;
+    if (startAlpha > 0.02) drawZone(s.startCol, s.startRow, startAlpha, false);
+
+    // End side: faint while arming, brightens 0 → 1 during 4..4.5, then briefly bright.
+    let endAlpha;
+    if (s.age < at) endAlpha = 0.2;
+    else if (s.age < appear) endAlpha = 0.2 + 0.8 * ((s.age - at) / (appear - at));
+    else endAlpha = Math.max(0, 1 - (s.age - appear) / 0.4);
+    if (endAlpha > 0.02) drawZone(s.endCol, s.endRow, endAlpha, s.age >= appear - 0.1);
+
+    // Brief beam at arrival.
+    if (s.age >= appear - 0.1 && s.age < appear + 0.4) {
+      const a = Math.max(0, 1 - (s.age - appear) / 0.5);
+      const sx = (s.startCol + 0.5) * ts;
+      const sy = (s.startRow + 0.5) * ts;
+      const ex = (s.endCol + 0.5) * ts;
+      const ey = (s.endRow + 0.5) * ts;
+      ctx.strokeStyle = `rgba(220, 160, 255, ${a * 0.9})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    }
+  }
+
+  /** Convert "#rrggbb" + alpha → "rgba(r, g, b, a)" for canvas styles. */
+  _hexWithAlpha(hex, alpha) {
+    if (!hex || hex[0] !== "#" || hex.length !== 7) return `rgba(255,255,255,${alpha})`;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  /**
+   * Chronomancy clock-face zone visual. Shared between Haste (gold, hands
+   * spinning fast clockwise), Slow (cyan, slow counter-clockwise), and Stop
+   * (violet, hands locked at 12 with a brief flash on each pulse).
+   */
+  _drawChronoClock(gs, s, def) {
+    const { ctx } = this;
+    const ts = gs.tileSize;
+    const cx = (s.col + 0.5) * ts;
+    const cy = (s.row + 0.5) * ts;
+    const r = (def.radius || 2) * ts;
+
+    let bodyFill, ringStroke, handStroke, handAngle, flash;
+    if (s.type === "chronoHaste") {
+      bodyFill   = "rgba(255, 217, 90, 0.18)";
+      ringStroke = "rgba(255, 200, 80, 0.85)";
+      handStroke = "rgba(255, 240, 180, 0.95)";
+      handAngle  = s.age * 6; // fast clockwise
+    } else if (s.type === "chronoSlow") {
+      bodyFill   = "rgba(96, 192, 255, 0.18)";
+      ringStroke = "rgba(96, 192, 255, 0.85)";
+      handStroke = "rgba(220, 240, 255, 0.95)";
+      handAngle  = -s.age * 0.6; // slow counter-clockwise
+    } else {
+      bodyFill   = "rgba(192, 96, 255, 0.18)";
+      ringStroke = "rgba(192, 96, 255, 0.85)";
+      handStroke = "rgba(240, 220, 255, 0.95)";
+      handAngle  = 0; // frozen at 12
+      const pulse = def.pulseInterval || 0.5;
+      const sinceLast = (s.age % pulse);
+      // Flash for first 0.15s of each pulse window.
+      flash = sinceLast < 0.15 ? (1 - sinceLast / 0.15) : 0;
+    }
+
+    // Disk body.
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = bodyFill;
+    ctx.fill();
+    ctx.strokeStyle = ringStroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Stop pulse flash overlay.
+    if (flash) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 220, 255, ${0.35 * flash})`;
+      ctx.fill();
+    }
+
+    // Clock face inside the zone (smaller, centered).
+    const fr = Math.min(ts * 0.55, r * 0.45);
+    ctx.beginPath();
+    ctx.arc(cx, cy, fr, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(20, 20, 30, 0.65)";
+    ctx.fill();
+    ctx.strokeStyle = handStroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Hour ticks at 12/3/6/9.
+    for (let k = 0; k < 4; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI) / 2;
+      const x1 = cx + Math.cos(a) * fr * 0.78;
+      const y1 = cy + Math.sin(a) * fr * 0.78;
+      const x2 = cx + Math.cos(a) * fr;
+      const y2 = cy + Math.sin(a) * fr;
+      ctx.strokeStyle = handStroke;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    // Hour hand (12 → 4 o'clock baseline) rotated by handAngle.
+    const baseAng = -Math.PI / 2;
+    const hourAng = baseAng + handAngle;
+    const minAng  = baseAng + handAngle * 6;
+    ctx.strokeStyle = handStroke;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(hourAng) * fr * 0.55, cy + Math.sin(hourAng) * fr * 0.55);
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(minAng) * fr * 0.85, cy + Math.sin(minAng) * fr * 0.85);
+    ctx.stroke();
+  }
+
+  /**
+   * Update the radial cooldown overlay + numeric label on each strategem button.
+   * Creates the overlay child div on first sight so neither game.js nor the
+   * sandbox controls need to know about the overlay structure.
+   */
+  _drawStrategemCooldowns(gs) {
+    if (!gs) return;
+    const defs = window.strategemTypes || {};
+    const abilityDefs = window.heroAbilityTypes || {};
+
+    const paintOverlay = (btn, remaining, total) => {
+      let overlay = btn.querySelector(".cd-overlay");
+      if (!overlay) {
+        if (getComputedStyle(btn).position === "static") btn.style.position = "relative";
+        overlay = document.createElement("div");
+        overlay.className = "cd-overlay";
+        overlay.style.cssText =
+          "position:absolute;inset:0;pointer-events:none;border-radius:inherit;" +
+          "display:flex;align-items:center;justify-content:center;" +
+          "font-family:monospace;font-weight:bold;font-size:13px;color:#fff;" +
+          "text-shadow:0 0 3px #000;";
+        btn.appendChild(overlay);
+      }
+      const onCD = remaining > 0;
+      if (onCD) {
+        const pct = Math.max(0, Math.min(100, (1 - remaining / total) * 100));
+        overlay.style.background =
+          `conic-gradient(transparent 0% ${pct}%, rgba(0,0,0,0.55) ${pct}% 100%)`;
+        overlay.textContent = remaining >= 10
+          ? String(Math.ceil(remaining))
+          : remaining.toFixed(1);
+        btn.classList.add("cd-active");
+        btn.style.opacity = "0.75";
+      } else {
+        overlay.style.background = "transparent";
+        overlay.textContent = "";
+        btn.classList.remove("cd-active");
+        btn.style.opacity = "";
+      }
+    };
+
+    // Strategem buttons
+    if (gs.strategemCooldowns) {
+      const buttons = document.querySelectorAll("[data-strategem-type]");
+      buttons.forEach((btn) => {
+        const type = btn.getAttribute("data-strategem-type");
+        const owner = btn.getAttribute("data-owner");
+        const def = defs[type];
+        if (!type || !owner || !def || def.cooldown == null) return;
+        const remaining = (gs.strategemCooldowns[owner] && gs.strategemCooldowns[owner][type]) || 0;
+        paintOverlay(btn, remaining, def.cooldown);
+      });
+    }
+
+    // Hero ability buttons — keyed by [data-hero-ability-key], cooldown lookup
+    // uses the bound `heroType` since the cooldown table is per-hero-type.
+    if (gs.heroAbilityCooldowns) {
+      const abilityButtons = document.querySelectorAll("[data-hero-ability-key]");
+      abilityButtons.forEach((btn) => {
+        const key = btn.getAttribute("data-hero-ability-key");
+        const owner = btn.getAttribute("data-owner");
+        const heroType = btn.getAttribute("data-hero-type");
+        const def = abilityDefs[key];
+        if (!key || !owner || !heroType || !def || def.cooldown == null) return;
+        const remaining = (gs.heroAbilityCooldowns[owner] && gs.heroAbilityCooldowns[owner][heroType]) || 0;
+        paintOverlay(btn, remaining, def.cooldown);
+      });
     }
   }
 
@@ -655,16 +1178,87 @@ class Renderer {
     if (ui.strategemMode) {
       const sDef = (window.gameSetupResult.gameLogic.strategemTypes || {})[ui.strategemMode.strategemType] || {};
       const owner = ui.strategemMode.owner;
-      switch (ui.strategemMode.strategemType) {
-        case "heal":
-        case "blizzard": {
+      const type = ui.strategemMode.strategemType;
+      switch (type) {
+        case "heal": {
           const radius = (sDef.radius || 3) * ts;
           ctx.beginPath();
           ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-          ctx.fillStyle = ui.strategemMode.strategemType === "heal"
-            ? "rgba(124,255,124,0.18)" : "rgba(160,216,255,0.18)";
+          ctx.fillStyle = "rgba(124,255,124,0.18)";
           ctx.fill();
           ctx.strokeStyle = "rgba(255,255,255,0.6)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          break;
+        }
+        case "necromancy": {
+          const radius = (sDef.radius || 6) * ts;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(120, 60, 160, 0.16)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(200,150,255,0.7)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          break;
+        }
+        case "ruin": {
+          const radius = (sDef.radius || 1.5) * ts;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(200,80,40,0.18)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,180,80,0.85)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          break;
+        }
+        case "chainLightning": {
+          const radius = (sDef.chainReach || 2.25) * ts;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,64,192,0.14)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,128,220,0.85)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          break;
+        }
+        case "gravityField": {
+          const radius = (sDef.radius || 4) * ts;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(60,80,160,0.18)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(140,170,255,0.85)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          break;
+        }
+        case "chronoHaste":
+        case "chronoSlow":
+        case "chronoStop": {
+          const radius = (sDef.radius || 2) * ts;
+          const palette = type === "chronoHaste"
+            ? { fill: "rgba(255,217,90,0.18)",  line: "rgba(255,200,80,0.85)" }
+            : type === "chronoSlow"
+            ? { fill: "rgba(96,192,255,0.18)",  line: "rgba(96,192,255,0.85)" }
+            : { fill: "rgba(192,96,255,0.18)",  line: "rgba(192,96,255,0.85)" };
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = palette.fill;
+          ctx.fill();
+          ctx.strokeStyle = palette.line;
           ctx.lineWidth = 1.5;
           ctx.setLineDash([5, 3]);
           ctx.stroke();
@@ -680,10 +1274,9 @@ class Renderer {
           ctx.setLineDash([]);
           break;
         }
-        case "divineWind": {
-          // If center pending, show the rectangle pointed at the cursor.
-          // Otherwise show a small "click for center" indicator.
-          if (ui.pendingStrategem && ui.pendingStrategem.strategemType === "divineWind") {
+        case "wind": {
+          // If start pending, show the rectangle pointed at the cursor.
+          if (ui.pendingStrategem && ui.pendingStrategem.strategemType === "wind") {
             const ccol = ui.pendingStrategem.col, crow = ui.pendingStrategem.row;
             const ccx = (ccol + 0.5) * ts, ccy = (crow + 0.5) * ts;
             const dCol = c - ccol, dRow = r - crow;
@@ -702,11 +1295,49 @@ class Renderer {
             ctx.setLineDash([]);
             ctx.restore();
           } else {
-            // Indicator at cursor
             ctx.strokeStyle = "rgba(160,224,255,0.8)";
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 3]);
             ctx.strokeRect(c * ts, r * ts, ts, ts);
+            ctx.setLineDash([]);
+          }
+          break;
+        }
+        case "lesserTeleport":
+        case "greaterTeleport": {
+          const zoneR = type === "greaterTeleport" ? (sDef.zoneRadius || 1) : 0;
+          const drawTile = (cc, rr, stroke) => {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(cc * ts, rr * ts, ts, ts);
+            ctx.setLineDash([]);
+          };
+          if (!ui.pendingStrategem || ui.pendingStrategem.strategemType !== type) {
+            // First click: preview the start zone at cursor.
+            for (let dr = -zoneR; dr <= zoneR; dr++) {
+              for (let dc = -zoneR; dc <= zoneR; dc++) {
+                drawTile(c + dc, r + dr, "rgba(180,100,255,0.85)");
+              }
+            }
+          } else {
+            // Pending: locked start zone + preview end zone at cursor.
+            const sc = ui.pendingStrategem.col, sr = ui.pendingStrategem.row;
+            for (let dr = -zoneR; dr <= zoneR; dr++) {
+              for (let dc = -zoneR; dc <= zoneR; dc++) {
+                drawTile(sc + dc, sr + dr, "rgba(180,100,255,0.85)");
+                drawTile(c + dc, r + dr, "rgba(220,160,255,0.85)");
+              }
+            }
+            const sx = (sc + 0.5) * ts, sy = (sr + 0.5) * ts;
+            const ex = (c + 0.5) * ts, ey = (r + 0.5) * ts;
+            ctx.strokeStyle = "rgba(220,160,255,0.6)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 4]);
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
             ctx.setLineDash([]);
           }
           break;

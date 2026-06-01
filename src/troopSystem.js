@@ -30,6 +30,23 @@ window.applyKnockback = applyKnockback;
  */
 function applyDamage(target, raw) {
   if (!target || raw <= 0) return;
+  // Teleporting troops are out of phase with the battlefield — nothing reaches
+  // them while they're invisible.
+  if (target.invisible) return;
+
+  // Bunker garrison damage shield: occupants absorb a share of the incoming
+  // damage; the bunker absorbs the rest. The recursive applyDamage call lets
+  // each occupant's own damageReduction apply to its share, and the bunker's
+  // DR still applies to its 70% via the path below.
+  if (target.type === "bunker" && target.occupants && target.occupants.length > 0) {
+    const def = (window.buildingTypes || {}).bunker;
+    const occShare = def && def.damageShieldRatio != null ? def.damageShieldRatio : 0.3;
+    const perOccupant = (raw * occShare) / target.occupants.length;
+    for (const occ of target.occupants.slice()) applyDamage(occ, perOccupant);
+    raw = raw * (1 - occShare);
+    if (raw <= 0) return;
+  }
+
   const dr = target.damageReduction || 0;
   const dealt = raw * (1 - dr);
   target.hp -= dealt;
@@ -65,8 +82,26 @@ class TroopSystem {
       }
     }
 
+    // Reset the per-frame death log; strategemSystem (Necromancy) reads this
+    // later in the frame.
+    if (gs.deathsThisFrame) gs.deathsThisFrame.length = 0;
+    else gs.deathsThisFrame = [];
+
     for (let i = gs.troops.length - 1; i >= 0; i--) {
       const troop = gs.troops[i];
+
+      // Ambush cloak expiry: clear `invisible` + `cloakActive` together.
+      if (troop.cloakedUntil && troop.cloakedUntil <= now) {
+        troop.invisible = false;
+        troop.cloakActive = false;
+        troop.cloakedUntil = 0;
+      }
+
+      // Teleport in transit — frozen out of the world for this frame. Cloaked
+      // (Strategia's Ambush) is also `invisible: true` BUT keeps updating so
+      // she can move/attack while untargetable — the `cloakActive` flag
+      // distinguishes the two.
+      if (troop.invisible && !troop.cloakActive) continue;
 
       // Passive HP regen (heroes have this; normal troops have hpRegen=0).
       // Applied before damage-this-frame so a unit at full HP doesn't briefly
@@ -75,9 +110,20 @@ class TroopSystem {
         troop.hp = Math.min(troop.maxHP, troop.hp + troop.hpRegen * deltaTime);
       }
 
-      // Burn DOT (applied before death check so it can kill)
-      if (troop.burnUntil && troop.burnUntil > now && troop.burnDps) {
+      // Burn DOT (applied before death check so it can kill). Garrisoned
+      // troops are sheltered — environmental DOTs don't reach them; only the
+      // bunker's 70/30 redistribution path delivers damage while inside.
+      if (!troop.garrisonedIn && troop.burnUntil && troop.burnUntil > now && troop.burnDps) {
         applyDamage(troop, troop.burnDps * deltaTime);
+      }
+
+      // Chill stack decay: 1 stack per 0.4s, independent of fresh applications.
+      if (troop.chillStacks && troop.chillStacks > 0) {
+        troop.chillDecayTimer = (troop.chillDecayTimer != null ? troop.chillDecayTimer : 0.4) - deltaTime;
+        if (troop.chillDecayTimer <= 0) {
+          troop.chillStacks = Math.max(0, troop.chillStacks - 1);
+          troop.chillDecayTimer = 0.4;
+        }
       }
 
       if (troop.hp <= 0) {
@@ -90,6 +136,13 @@ class TroopSystem {
           gs.setGameOver(winner);
           return;
         }
+        // Free the bunker slot if this troop was garrisoned.
+        if (troop.garrisonedIn && troop.garrisonedIn.occupants) {
+          const idx = troop.garrisonedIn.occupants.indexOf(troop);
+          if (idx >= 0) troop.garrisonedIn.occupants.splice(idx, 1);
+        }
+        // Log the death so strategemSystem.Necromancy can react this frame.
+        if (gs.deathsThisFrame) gs.deathsThisFrame.push(troop);
         gs.troops.splice(i, 1);
         continue;
       }
@@ -106,6 +159,8 @@ class TroopSystem {
       }
 
       if (troop.stunUntil && troop.stunUntil > now) continue;
+      // Frozen (chill stacks capped this troop): no movement, no attack for 1s.
+      if (troop.frozenUntil && troop.frozenUntil > now) continue;
 
       // ── Sticky targeting ──
       // Keep the current target until it dies, leaves vision, or we get hit by a
@@ -132,15 +187,23 @@ class TroopSystem {
       troop.lastTarget = target; // renderer reads this for targeting lines
 
       const slowed = troop.slowUntil && troop.slowUntil > now;
-      const slowFactor = slowed ? (troop.slowFactor || 1) : 1;
-      const effSpeed = troop.speed * slowFactor;
+      const hasted = troop.hasteUntil && troop.hasteUntil > now;
+      const slowMove  = slowed ? (troop.slowFactor       || 1) : 1;
+      const slowAtk   = slowed ? (troop.slowAttackFactor || 1) : 1;
+      const hasteMove = hasted ? (troop.hasteFactor       || 1) : 1;
+      const hasteAtk  = hasted ? (troop.hasteAttackFactor || 1) : 1;
+      // Chill multiplier: 1% per stack of movement/attack debuff, capped at 80%.
+      const chillMul = Math.max(0.2, 1 - 0.01 * (troop.chillStacks || 0));
+      const effSpeed = troop.speed * slowMove * hasteMove * chillMul;
 
       const dist = this._distanceTo(troop, target);
       const inAttackRange = target && dist <= troop.range;
 
       if (inAttackRange) {
         troop.attackTimer = (troop.attackTimer || 0) + deltaTime;
-        const attackInterval = troop.attackSpeed > 0 ? 1 / troop.attackSpeed : Infinity;
+        const attackInterval = troop.attackSpeed > 0
+          ? 1 / (troop.attackSpeed * slowAtk * hasteAtk * chillMul)
+          : Infinity;
         if (troop.attackTimer >= attackInterval) {
           troop.attackTimer -= attackInterval;
           applyDamage(target, troop.damage);
@@ -157,9 +220,10 @@ class TroopSystem {
           if (am) am.playTroopAttack(troop);
 
         }
-      } else if (!troop.isHero) {
-        // Heroes are manual-only — keyboard input is the sole mover. Targeting
-        // and auto-attack still run above; we just skip the AI movement branches.
+      } else if (!troop.isHero && !troop.garrisonedIn) {
+        // Heroes are manual-only — keyboard input is the sole mover. Garrisoned
+        // troops are pinned inside their bunker. Targeting and auto-attack still
+        // run above for both; we just skip the AI movement branches here.
         if (target) {
           // Pursue: aim at the nearest point on the target (matters for multi-tile buildings)
           const np = this._nearestPointOn(target, troop.col, troop.row);
@@ -174,8 +238,9 @@ class TroopSystem {
         }
       }
 
-      // Divine-Wind push velocity (per-frame, consumed each tick)
-      if (troop.pushVx || troop.pushVy) {
+      // Divine-Wind push velocity (per-frame, consumed each tick). Garrisoned
+      // troops are pinned inside the bunker; the push has nowhere to go.
+      if (!troop.garrisonedIn && (troop.pushVx || troop.pushVy)) {
         troop.col = this._clampCol(troop, troop.col + troop.pushVx * deltaTime);
         troop.row = this._clampRow(troop, troop.row + troop.pushVy * deltaTime);
         troop.pushVx = 0;
@@ -183,8 +248,101 @@ class TroopSystem {
       }
     }
 
+    // Garrison entries: any eligible non-garrisoned troop now overlapping a
+    // friendly Bunker enters it (FIFO push if full). Runs after movement so
+    // the troop has moved this frame, but before collision resolution so the
+    // arrival is correctly removed from collision consideration.
+    this._processBunkerEntries();
+
     // Resolve overlaps after all troops have moved
     this._resolveCollisions();
+  }
+
+  /**
+   * Walk all friendly Bunkers and admit any eligible non-garrisoned troop
+   * currently overlapping one. Eligibility: ranged unit (range >= threshold),
+   * not a hero, attack-capable, active. FIFO push if the bunker is full.
+   */
+  _processBunkerEntries() {
+    const gs = this.gameState;
+    if (!gs || !gs.troops || !gs.buildings) return;
+    for (const t of gs.troops) {
+      if (t.garrisonedIn) continue;
+      if (t.active === false) continue;
+      if (!this._isGarrisonEligible(t)) continue;
+      const b = this._findOverlappingFriendlyBunker(t);
+      if (b) this._enterBunker(t, b);
+    }
+  }
+
+  _isGarrisonEligible(t) {
+    if (t.isHero) return false;
+    if (!t.attackSpeed || t.attackSpeed <= 0) return false;
+    const def = (this.gameLogic.buildingTypes || {}).bunker;
+    const threshold = def && def.garrisonRangeThreshold != null ? def.garrisonRangeThreshold : 2.0;
+    return (t.range || 0) >= threshold;
+  }
+
+  _findOverlappingFriendlyBunker(t) {
+    for (const b of this.gameState.buildings) {
+      if (b.type !== "bunker") continue;
+      if (b.owner !== t.owner) continue;
+      if (!b.active) continue;
+      if (this._troopOverlapsBuilding(t, b)) return b;
+    }
+    return null;
+  }
+
+  // AABB-vs-circle: troop center inside a small inflation of the building rect.
+  _troopOverlapsBuilding(t, b) {
+    const left = b.col, right = b.col + (b.width || 1);
+    const top  = b.row, bottom = b.row + (b.height || 1);
+    const r = t.radius || 0.25;
+    const nx = Math.max(left, Math.min(t.col, right));
+    const ny = Math.max(top,  Math.min(t.row, bottom));
+    const dx = t.col - nx;
+    const dy = t.row - ny;
+    return Math.sqrt(dx * dx + dy * dy) < r;
+  }
+
+  /**
+   * Admit a troop into a Bunker. If full, FIFO-eject the oldest occupant out
+   * the bunker's front edge (toward enemy) before appending the arrival.
+   * Pinning position to the bunker center means existing target/range/vision
+   * math automatically treats the bunker as the firing origin.
+   */
+  _enterBunker(troop, b) {
+    const def = (this.gameLogic.buildingTypes || {}).bunker;
+    const slots = def && def.garrisonSlots != null ? def.garrisonSlots : 2;
+    if (!b.occupants) b.occupants = [];
+
+    if (b.occupants.length >= slots) {
+      const old = b.occupants.shift();
+      if (old) this._ejectOccupantForward(b, old);
+    }
+
+    b.occupants.push(troop);
+    troop.garrisonedIn = b;
+    troop.col = b.col + (b.width || 1) / 2;
+    troop.row = b.row + (b.height || 1) / 2;
+    troop.target = null;
+    troop.pushVx = 0;
+    troop.pushVy = 0;
+  }
+
+  // Eject to the front edge (toward enemy), so a "pushed" troop resumes the
+  // march one tile closer to its objective.
+  _ejectOccupantForward(b, t) {
+    const gs = this.gameState;
+    const colTarget = b.owner === "player1"
+      ? b.col + (b.width || 1) + 0.25
+      : b.col - 0.25;
+    const rowTarget = b.row + (b.height || 1) / 2;
+    t.col = Math.max(0.5, Math.min(gs.cols - 0.5, colTarget));
+    t.row = Math.max(0.5, Math.min(gs.rows - 0.5, rowTarget));
+    t.garrisonedIn = null;
+    t.target = null;
+    t.attackTimer = 0;
   }
 
   /**
@@ -214,10 +372,12 @@ class TroopSystem {
     // ── Troop vs troop (mass-weighted) ──
     for (let i = 0; i < troops.length; i++) {
       const a = troops[i];
+      if (a.garrisonedIn || a.invisible) continue; // pinned inside a bunker / out of phase; no collision
       const ar = a.radius || 0.25;
       const am = a.mass   || 1.0;
       for (let j = i + 1; j < troops.length; j++) {
         const b = troops[j];
+        if (b.garrisonedIn || b.invisible) continue;
         const br = b.radius || 0.25;
         const bm = b.mass   || 1.0;
         const minDist = ar + br;
@@ -251,6 +411,7 @@ class TroopSystem {
 
     // ── Troop vs enemy building (infinite mass; friendly = pass-through) ──
     for (const t of troops) {
+      if (t.garrisonedIn || t.invisible) continue;
       const r = t.radius || 0.25;
       for (const b of gs.buildings) {
         if (b.owner === t.owner) continue; // friendly = walkable
@@ -303,6 +464,7 @@ class TroopSystem {
     // Enemy troops
     for (const t of gs.troops) {
       if (t.owner !== enemy) continue;
+      if (t.invisible) continue;
       const dx = t.col - troop.col;
       const dy = t.row - troop.row;
       const d = Math.sqrt(dx * dx + dy * dy);
@@ -483,6 +645,7 @@ class TroopSystem {
     let bestDist = Infinity;
     for (const t of gs.troops) {
       if (t.owner !== enemy) continue;
+      if (t.invisible) continue;
       const dx = t.col - troop.col;
       const dy = t.row - troop.row;
       const d = Math.sqrt(dx * dx + dy * dy);

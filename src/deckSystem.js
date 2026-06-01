@@ -18,24 +18,34 @@ class DeckSystem {
     this.availableBuildings = [
       "wall",
       "farm",
-      "sniperOutpost",
-      "missileSilo",
-      "warCamp",
-      "archerTower",
+      "cannon",
+      "bunker",
+      "supplyDepot",
+      "warBonesFactory",
+      "chillTurret",
+      "lavaMortar",
     ];
 
     this.availableStrategems = [
       "heal",
-      "divineWind",
-      "blizzard",
+      "wind",
+      "necromancy",
+      "ruin",
       "blast",
+      "chainLightning",
+      "gravityField",
+      "lesserTeleport",
+      "greaterTeleport",
+      "chronoHaste",
+      "chronoSlow",
+      "chronoStop",
     ];
 
     // Default deck (4 troops, 2 buildings, 2 strategems)
     this.defaultDeck = {
       troops: ["swordsman", "archer", "heavy", "militia"],
       strategems: ["heal", "blast"],
-      buildings: ["farm", "sniperOutpost"],
+      buildings: ["farm", "cannon"],
     };
 
     // Player decks storage

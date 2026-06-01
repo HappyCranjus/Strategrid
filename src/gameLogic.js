@@ -3,44 +3,100 @@
  */
 const buildingTypes = {
   wall: {
-    cost: 1,
-    hp: 150,
+    cost: 0.5,
+    hp: 100,
     activationTime: 0,
     width: 1,
     height: 1,
     color: "#888888",
   },
   farm: {
-    cost: 2.5,
-    hp: 50,
-    activationTime: 3,
-    width: 2,
-    height: 2,
-    color: "#6b8e23",
-    rpBonus: 0.5,
-    bonusInterval: 15,
-  },
-  archerTower: {
-    cost: 8,
-    hp: 80,
-    activationTime: 5,
-    width: 2,
-    height: 2,
-    color: "#8a2be2",
-    damage: 4,
-    range: 6,
-    attackCooldown: 1.0,
-  },
-  sniperOutpost: {
-    cost: 3,
-    hp: 60,
-    activationTime: 4,
+    cost: 2,
+    hp: 40,
+    activationTime: 2,
     width: 1,
     height: 1,
-    color: "#4169e1",
-    damage: 25,
-    range: 10,
-    attackCooldown: 6,
+    color: "#6b8e23",
+    rpBonus: 0.1,
+    bonusInterval: 5,
+  },
+  cannon: {
+    cost: 5,
+    hp: 105,
+    activationTime: 4,
+    width: 0.5,
+    height: 0.5,
+    color: "#5a3a2a",
+    damage: 50,
+    range: 7,
+    attackCooldown: 2.5,
+  },
+  bunker: {
+    cost: 4,
+    hp: 400,
+    activationTime: 0,
+    width: 1,
+    height: 2,
+    color: "#4a4a4a",
+    damageReduction: 0.4,
+    // Garrison: ranged friendly troops (range >= garrisonRangeThreshold) enter
+    // on contact and fire from inside. A third arrival pushes the oldest out
+    // the front (FIFO). The Bunker absorbs (1 - damageShieldRatio) of incoming
+    // damage; the rest is split evenly among occupants. All tuning is here so
+    // the whole identity is one block.
+    garrisonSlots: 2,
+    garrisonRangeThreshold: 2.0,
+    damageShieldRatio: 0.3,
+  },
+  supplyDepot: {
+    cost: 2,
+    hp: 40,
+    activationTime: 3,
+    width: 1,
+    height: 1,
+    color: "#c08040",
+    tpBonus: 0.1,
+    bonusInterval: 8,
+  },
+  warBonesFactory: {
+    cost: 6,
+    hp: 100,
+    activationTime: 5,
+    width: 1,
+    height: 1,
+    color: "#dcdcdc",
+    spawnInterval: 3.5,
+    deathSpawnCount: 3,
+  },
+  chillTurret: {
+    cost: 4,
+    hp: 60,
+    activationTime: 4,
+    width: 0.25,
+    height: 0.25,
+    color: "#a0d8ff",
+    damage: 1,
+    range: 7.5,
+    attackCooldown: 0.2,
+    chillStacksPerHit: 2,
+  },
+  lavaMortar: {
+    cost: 6,
+    hp: 80,
+    activationTime: 5,
+    width: 0.25,
+    height: 0.25,
+    color: "#cc3300",
+    damage: 15,
+    range: 7.5,
+    attackCooldown: 5,
+    splashRadius: 1.25,
+    blindSpot: 1.5,
+    // Lingering burning patch left on impact. All patch tuning lives here so
+    // the Lava Mortar's whole damage profile (impact + DoT) is one block.
+    patchDuration: 3, // seconds the patch lingers
+    patchRadius: 1.25, // tiles affected
+    patchDps: 6, // HP/sec to enemies standing in the patch
   },
   towerTurret: {
     cost: 0,
@@ -49,54 +105,33 @@ const buildingTypes = {
     width: 1,
     height: 1,
     color: "#5a6578",
-    damage: 11,
+    damage: 8,
     range: 7,
-    attackCooldown: 1.0,
+    attackCooldown: 0.5,
     hpRegen: 0.2,
     damageReduction: 0.3,
-  },
-  warCamp: {
-    cost: 5,
-    hp: 60,
-    activationTime: 2,
-    width: 2,
-    height: 2,
-    color: "#8b4513",
-    influenceRadius: 3.5,
-    buff: {
-      moveSpeedMultiplier: 1.4,
-      attackSpeedMultiplier: 1.4,
-      healRate: 0.5,
-      armorRegenRate: 3,
-    },
-  },
-  missileSilo: {
-    cost: 4,
-    hp: 80,
-    activationTime: 5,
-    width: 2,
-    height: 2,
-    color: "#cc3300",
-    damage: 20,
-    range: 8,
-    attackCooldown: 8,
-    splashRadius: 1.5,
   },
 };
 
 /**
- * All strategem type definitions
+ * All strategem type definitions. The deck-visible roster (heal..greaterTeleport)
+ * each carry a `cooldown` (seconds, starts at cast) and a `tpCost`. `burningPatch`
+ * is spawned by the Lava Mortar and never exposed to the deck builder.
  */
 const strategemTypes = {
   heal: {
-    tpCost: 2,
+    tpCost: 1.0,
+    cooldown: 10,
     targeting: "tile",
-    duration: 8,
+    duration: 3.5,
     radius: 3,
+    initialHeal: 15,
+    pulseHeal: 5,
     color: "#7cff7c",
   },
-  divineWind: {
-    tpCost: 2,
+  wind: {
+    tpCost: 1.0,
+    cooldown: 14,
     targeting: "twoClick",
     duration: 6,
     length: 8,
@@ -105,17 +140,31 @@ const strategemTypes = {
     pushSpeed: 0.35,
     color: "#a0e0ff",
   },
-  blizzard: {
-    tpCost: 1.5,
+  necromancy: {
+    tpCost: 2,
+    cooldown: 25,
     targeting: "tile",
-    duration: 5,
-    radius: 3.5,
-    slowFactor: 0.3,
-    dps: 3,
-    color: "#a0d8ff",
+    duration: 18,
+    radius: 6,
+    dps: 1,
+    spawnDelay: 0.3,
+    color: "#7d4ea0",
+  },
+  ruin: {
+    tpCost: 2.5,
+    cooldown: 16,
+    targeting: "tile",
+    duration: 4,
+    radius: 2,
+    activationTime: 4,
+    buildingDamage: 250,
+    towerTurretDamage: 25,
+    heroDamage: 25,
+    color: "#b08060",
   },
   blast: {
-    tpCost: 2.5,
+    tpCost: 1.5,
+    cooldown: 12,
     targeting: "tile",
     duration: 0.5,
     instant: true,
@@ -124,6 +173,134 @@ const strategemTypes = {
     adjacentDamage: 15,
     adjacentKnockback: 1,
     color: "#ffd060",
+  },
+  chainLightning: {
+    tpCost: 2.5,
+    cooldown: 22,
+    targeting: "tile",
+    duration: 15,
+    activationTime: 3,
+    strikeInterval: 2,
+    totalStrikes: 6,
+    chainReach: 2.25,
+    maxChainHits: 6,
+    troopDamage: 42,
+    buildingDamage: 6,
+    heroDamage: 12,
+    color: "#ff40c0",
+  },
+  gravityField: {
+    tpCost: 2.0,
+    cooldown: 12,
+    targeting: "tile",
+    duration: 4,
+    radius: 4,
+    pullSpeed: 1.5,
+    maxDps: 6,
+    damageTickRate: 3,
+    color: "#3050a0",
+  },
+  lesserTeleport: {
+    tpCost: 2.5,
+    cooldown: 16,
+    targeting: "twoClick",
+    duration: 4.5,
+    activationTime: 4,
+    appearDelay: 0.5,
+    zoneRadius: 0,
+    color: "#a060ff",
+  },
+  greaterTeleport: {
+    tpCost: 3.5,
+    cooldown: 25,
+    targeting: "twoClick",
+    duration: 8.5,
+    activationTime: 8,
+    appearDelay: 0.5,
+    zoneRadius: 1,
+    color: "#c060ff",
+  },
+  // Chronomancy trio: persistent tile-AoE buffs/debuffs. Effect is refreshed
+  // per frame on troops inside the zone; a `tailDuration` of ~0.5s lets the
+  // effect linger briefly after a troop leaves. Heroes get muted multipliers.
+  chronoHaste: {
+    tpCost: 2,
+    cooldown: 14,
+    targeting: "tile",
+    duration: 5,
+    radius: 2,
+    troopSpeed: 2.0,
+    troopAttack: 1.5,
+    heroSpeed: 1.5,
+    heroAttack: 1.25,
+    tailDuration: 0.5,
+    color: "#ffd95a",
+  },
+  chronoSlow: {
+    tpCost: 2.5,
+    cooldown: 18,
+    targeting: "tile",
+    duration: 8,
+    radius: 3,
+    troopSpeed: 0.4,
+    troopAttack: 0.6,
+    heroSpeed: 0.7,
+    heroAttack: 0.8,
+    tailDuration: 0.5,
+    color: "#60c0ff",
+  },
+  chronoStop: {
+    tpCost: 3,
+    cooldown: 22,
+    targeting: "tile",
+    duration: 4,
+    radius: 1.5,
+    pulseInterval: 0.5,
+    troopStunDuration: 0.5,
+    heroStunDuration: 0.25,
+    color: "#c060ff",
+  },
+  // Internal-only: spawned by Lava Mortar, never exposed to deck builder.
+  burningPatch: {
+    tpCost: 0,
+    targeting: "internal",
+    duration: 4.5,
+    radius: 2,
+    dps: 5,
+    color: "#ff6022",
+  },
+};
+
+/**
+ * Hero ability definitions. Bound to a specific hero via `heroType`.
+ * Activated by SPACEBAR (P1) or ENTER (sandbox P2). Mirrors the strategem
+ * tpCost/cooldown contract so the same gating + UI overlay code applies.
+ */
+const heroAbilityTypes = {
+  summoningStrike: {
+    heroType: "brickMcStick",
+    tpCost: 1.5,
+    cooldown: 18,
+    radius: 1, // 3x3 box: |dCol|<=1 && |dRow|<=1
+    damage: 60,
+    knockback: 1.5,
+    summonType: "swordsman",
+    summonCount: 3,
+    healAmount: 50,
+    color: "#ffb050",
+  },
+  ambush: {
+    heroType: "strategia",
+    tpCost: 1.5,
+    cooldown: 22,
+    duration: 3,
+    hasteFactor: 1.5,
+    hasteAttackFactor: 1.5,
+    summonSpec: [
+      { type: "archer", count: 1 },
+      { type: "militia", count: 1 },
+    ],
+    color: "#c060ff",
   },
 };
 
@@ -136,7 +313,7 @@ const troopTypes = {
     hp: 45,
     damage: 23,
     attackSpeed: 1.2,
-    range: 0.5,
+    range: 1,
     vision: 5,
     speed: 0.55,
     mass: 1.0,
@@ -169,7 +346,7 @@ const troopTypes = {
     hp: 25,
     damage: 12,
     attackSpeed: 1.8,
-    range: 0.6,
+    range: 1,
     vision: 5.0,
     speed: 0.75,
     mass: 0.75,
@@ -191,7 +368,7 @@ const troopTypes = {
     hp: 185,
     damage: 25,
     attackSpeed: 0.5,
-    range: 0.75,
+    range: 1.25,
     vision: 5.5,
     speed: 1.25,
     mass: 1.25,
@@ -208,15 +385,37 @@ const troopTypes = {
     mass: 1,
     radius: 0.25,
   },
+  skeleton: {
+    cost: 0,
+    hp: 15,
+    damage: 5,
+    attackSpeed: 2,
+    range: 1,
+    vision: 5,
+    speed: 0.55,
+    mass: 0.8,
+    radius: 0.2,
+  },
+  zombie: {
+    cost: 0,
+    hp: 250,
+    damage: 25,
+    attackSpeed: 1,
+    range: 1.0,
+    vision: 5.5,
+    speed: 0.1,
+    mass: 1.3,
+    radius: 0.3,
+  },
   brickMcStick: {
     cost: 0,
     hp: 400,
     damage: 25,
-    attackSpeed: 1.0,
+    attackSpeed: 0.7,
     range: 1.5,
     vision: 5,
-    speed: 2,
-    mass: 3.0,
+    speed: 2.25,
+    mass: 2.0,
     radius: 0.42,
     isHero: true,
     hpRegen: 1.75,
@@ -227,9 +426,9 @@ const troopTypes = {
     hp: 245,
     damage: 13,
     attackSpeed: 1.5,
-    range: 7,
-    vision: 7,
-    speed: 1.25,
+    range: 4.5,
+    vision: 4.5,
+    speed: 1.75,
     mass: 1.25,
     radius: 0.35,
     isHero: true,
@@ -247,6 +446,20 @@ class GameLogic {
     this.buildingTypes = buildingTypes;
     this.troopTypes = troopTypes;
     this.strategemTypes = strategemTypes;
+    this.heroAbilityTypes = heroAbilityTypes;
+  }
+
+  /**
+   * Resolve the ability def bound to a given hero type. Returns null when
+   * the hero has no ability registered.
+   */
+  getHeroAbility(heroType) {
+    for (const key in heroAbilityTypes) {
+      if (heroAbilityTypes[key].heroType === heroType) {
+        return Object.assign({ key }, heroAbilityTypes[key]);
+      }
+    }
+    return null;
   }
 
   createTroop(type, row, col, owner) {
@@ -287,6 +500,7 @@ class GameLogic {
       zigTargetCol: col,
       patrolDir: startDir,
       patrolBroken: false,
+      garrisonedIn: null,
     };
   }
 
@@ -313,11 +527,13 @@ class GameLogic {
       damageReduction: def.damageReduction || 0,
     };
 
-    if (type === "farm") building.bonusTimer = 0;
+    if (type === "farm" || type === "supplyDepot") building.bonusTimer = 0;
+    if (type === "warBonesFactory") building.spawnTimer = 0;
+    if (type === "bunker") building.occupants = [];
     if (
-      type === "archerTower" ||
-      type === "sniperOutpost" ||
-      type === "missileSilo" ||
+      type === "cannon" ||
+      type === "chillTurret" ||
+      type === "lavaMortar" ||
       type === "towerTurret"
     ) {
       building.attackTimer = 0;
@@ -342,18 +558,53 @@ class GameLogic {
       row: params.row,
       col: params.col,
       age: 0,
-      duration: def.duration || 0,
+      duration: params.duration != null ? params.duration : def.duration || 0,
     };
-    if (type === "divineWind") {
+    if (type === "burningPatch") {
+      // Per-instance overrides so the caller (e.g. Lava Mortar) owns the tuning.
+      s.radius = params.radius != null ? params.radius : def.radius;
+      s.dps = params.dps != null ? params.dps : def.dps;
+    }
+    if (type === "wind") {
       s.dirCol = params.dirCol || (params.owner === "player1" ? 1 : -1);
       s.dirRow = params.dirRow || 0;
       const mag = Math.sqrt(s.dirCol * s.dirCol + s.dirRow * s.dirRow) || 1;
       s.dirCol /= mag;
       s.dirRow /= mag;
     }
-    // heal: pulse schedule handled by strategemSystem reading s.age
-    // blizzard: per-frame application; no extra state
+    if (type === "heal") {
+      // Track which pulse ages have already fired so the renderer / updater
+      // doesn't double-pulse on a long frame.
+      s.firedInitial = false;
+    }
+    if (type === "necromancy") {
+      // Spawn cycle: 4 skeletons then 1 zombie, repeating. pendingSpawns are
+      // queued on enemy deaths inside the zone and fire `spawnDelay` later.
+      s.spawnCycleIndex = 0;
+      s.pendingSpawns = [];
+    }
+    if (type === "chainLightning") {
+      // strikesFired counts off the 6 strikes scheduled at activationTime,
+      // activationTime + strikeInterval, ... lastHits / lastHitsAge feed the
+      // transient polyline renderer.
+      s.strikesFired = 0;
+      s.lastHits = [];
+      s.lastHitsAge = 0;
+    }
+    if (type === "gravityField") {
+      s.damageTickTimer = 0;
+    }
+    if (type === "lesserTeleport" || type === "greaterTeleport") {
+      s.startCol = params.col;
+      s.startRow = params.row;
+      s.endCol = params.endCol != null ? params.endCol : params.col;
+      s.endRow = params.endRow != null ? params.endRow : params.row;
+      s.phase = "arming";
+      s.cargo = [];
+    }
     // blast: instant effect applied by caller; entity is a 0.5s flash
+    // ruin: damage applied once at activationTime
+    // burningPatch: per-frame DOT applied by strategemSystem
     return s;
   }
 }
@@ -363,3 +614,4 @@ window.GameLogic = GameLogic;
 window.buildingTypes = buildingTypes;
 window.troopTypes = troopTypes;
 window.strategemTypes = strategemTypes;
+window.heroAbilityTypes = heroAbilityTypes;
