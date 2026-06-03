@@ -297,14 +297,41 @@ class GameState {
   }
 
   /**
-   * Apply player action (host side)
-   * @param {Object} action - Player action
-   * @param {string} player - Player ID
+   * Apply a player action received over the network (host side).
+   * `player` is the sender's player ID (set by NetworkingSystem from its own
+   * remotePlayerId — clients cannot spoof another player by tweaking the action).
+   * Re-validates costs / zones via the existing UIState handlers.
    */
   applyPlayerAction(action, player) {
-    // Handle player actions (spawn troop, place building, etc.)
-    // This will be implemented by the game systems
-    console.log("[GameState] Applying player action:", action, "for", player);
+    if (!action || !action.kind) return;
+    const setup = window.gameSetupResult;
+    if (!setup) return;
+    const ui = setup.uiState;
+    const ss = setup.strategemSystem;
+
+    switch (action.kind) {
+      case "spawnTroop":
+        if (ui) ui._trySpawnTroop(action.row, action.col, player, action.troopType);
+        break;
+      case "placeBuilding":
+        if (ui) ui._tryPlaceBuilding(action.row, action.col, player, action.buildingType);
+        break;
+      case "placeStrategem":
+        if (ui) ui._commitStrategem(player, action.strategemType, action.params || {});
+        break;
+      case "heroAbility":
+        if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility(player);
+        break;
+      case "heroPosition": {
+        const hero = player === "player1" ? this.hero1 : this.hero2;
+        if (hero && typeof action.col === "number" && typeof action.row === "number") {
+          hero.col = action.col;
+          hero.row = action.row;
+          hero.target = null;
+        }
+        break;
+      }
+    }
   }
 }
 
