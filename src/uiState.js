@@ -56,6 +56,17 @@ class UIState {
     });
   }
 
+  _isRemoteClient() {
+    const ns = this.networkingSystem;
+    return !!(ns && ns.connectionState === "connected" && !ns.isHost);
+  }
+
+  _sendAction(action) {
+    if (this.networkingSystem) {
+      this.networkingSystem.sendMessage({ type: "playerAction", action });
+    }
+  }
+
   _eventToTile(e) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
@@ -86,6 +97,10 @@ class UIState {
   }
 
   _trySpawnTroop(row, col, owner, troopType) {
+    if (this._isRemoteClient()) {
+      this._sendAction({ kind: "spawnTroop", row, col, troopType });
+      return;
+    }
     const gs = this.gameState;
     const elig = this.getSpawnEligibility(col, row, owner, troopType);
     if (!elig.zoneOK || !elig.affordOK) return;
@@ -178,6 +193,11 @@ class UIState {
   }
 
   _tryPlaceBuilding(row, col, owner, buildingType) {
+    if (this._isRemoteClient()) {
+      this._sendAction({ kind: "placeBuilding", row, col, buildingType });
+      this.buildMode = null;
+      return;
+    }
     const gs = this.gameState;
     // Enforce placement zones: player1 on left half, player2 on right half.
     // Sandbox waives the restriction so the dev can place anywhere.
@@ -215,7 +235,9 @@ class UIState {
 
   /**
    * Place a strategem at (row, col) for owner. Handles tile / column /
-   * tile_ownHalf / twoClick targeting from `strategemTypes`.
+   * tile_ownHalf / twoClick targeting from `strategemTypes`. The twoClick
+   * UX state (pendingStrategem) stays client-side; only the committed
+   * action — with resolved start/end/dir — crosses the wire.
    */
   _tryPlaceStrategem(row, col, owner, strategemType) {
     const gs = this.gameState;
@@ -225,8 +247,6 @@ class UIState {
     const tpCost = def.tpCost || 0;
     if ((gs.currentTP[owner] || 0) < tpCost) return;
 
-    // Cooldown gate — refuse late even if the user got here via a stale
-    // setStrategemMode call.
     if (def.cooldown != null && this.strategemSystem && !this.strategemSystem.isReady(owner, strategemType)) {
       return;
     }
@@ -238,11 +258,8 @@ class UIState {
 
     if (def.targeting === "tile_ownHalf" && !inOwnHalf) return;
 
-    let entity = null;
+    let params;
     if (def.targeting === "twoClick") {
-      // 1st click: set pending start; 2nd click: commit with direction +
-      // end-tile coords so Wind (uses direction) and Teleports (use end tile)
-      // can both read what they need.
       if (!this.pendingStrategem) {
         this.pendingStrategem = { strategemType, owner, row, col };
         return;
@@ -250,8 +267,7 @@ class UIState {
       const start = this.pendingStrategem;
       const dirCol = col - start.col;
       const dirRow = row - start.row;
-      const ss = this.strategemSystem;
-      entity = ss.createStrategem(strategemType, {
+      params = {
         owner,
         row: start.row,
         col: start.col,
@@ -259,16 +275,36 @@ class UIState {
         dirRow: dirRow,
         endCol: col,
         endRow: row,
-      });
+      };
       this.pendingStrategem = null;
     } else {
-      const ss = this.strategemSystem;
-      entity = ss.createStrategem(strategemType, { owner, row, col });
+      params = { owner, row, col };
     }
 
+    if (this._isRemoteClient()) {
+      this._sendAction({ kind: "placeStrategem", strategemType, params });
+      this.strategemMode = null;
+      return;
+    }
+
+    this._commitStrategem(owner, strategemType, params);
+    this.strategemMode = null;
+  }
+
+  /**
+   * Final commit step shared by local input and network-applied actions.
+   * Re-validates TP/cooldown so a client cannot bypass costs by spoofing
+   * the action shape.
+   */
+  _commitStrategem(owner, strategemType, params) {
+    const gs = this.gameState;
+    const def = (this.gameLogic.strategemTypes || {})[strategemType] || {};
+    const tpCost = def.tpCost || 0;
+    if ((gs.currentTP[owner] || 0) < tpCost) return;
+    if (def.cooldown != null && this.strategemSystem && !this.strategemSystem.isReady(owner, strategemType)) return;
+    const entity = this.strategemSystem.createStrategem(strategemType, params);
     if (!entity) return;
     gs.currentTP[owner] = Math.max(0, (gs.currentTP[owner] || 0) - tpCost);
-    this.strategemMode = null;
   }
 
   /**

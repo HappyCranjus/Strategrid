@@ -35,16 +35,19 @@ class HeroInput {
       if (k === " " || k === "enter") {
         if (e.repeat) { if (e.preventDefault) e.preventDefault(); return; }
         const ss = window.strategemSystem;
-        if (ss && ss.tryActivateHeroAbility) {
-          const mode = this.gameState && this.gameState.gameMode;
-          if (k === " ") {
-            const owner = (mode === "pvp" && window.networkingSystem && window.networkingSystem.getLocalPlayerId)
-              ? window.networkingSystem.getLocalPlayerId()
-              : "player1";
+        const mode = this.gameState && this.gameState.gameMode;
+        if (k === " ") {
+          const ns = window.networkingSystem;
+          const owner = (mode === "pvp" && ns && ns.getLocalPlayerId)
+            ? ns.getLocalPlayerId()
+            : "player1";
+          if (ns && ns.connectionState === "connected" && !ns.isHost) {
+            ns.sendMessage({ type: "playerAction", action: { kind: "heroAbility" } });
+          } else if (ss && ss.tryActivateHeroAbility) {
             ss.tryActivateHeroAbility(owner);
-          } else if (k === "enter" && mode === "sandbox") {
-            ss.tryActivateHeroAbility("player2");
           }
+        } else if (k === "enter" && mode === "sandbox") {
+          if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility("player2");
         }
         if (e.preventDefault) e.preventDefault();
         return;
@@ -140,6 +143,22 @@ class HeroInput {
     // Manual movement breaks auto-pursuit so the hero can disengage.
     // Targeting re-acquires next tick via TroopSystem._findTarget.
     hero.target = null;
+
+    // PvP client: throttle-broadcast our hero position to the host. The host's
+    // applyPlayerAction("heroPosition") writes it onto gs.hero2, and the next
+    // 100ms snapshot delivers it back to everyone (rubber-band in applyNetworkState
+    // preserves our own position locally).
+    const ns = window.networkingSystem;
+    if (ns && ns.connectionState === "connected" && !ns.isHost && owner === ns.getLocalPlayerId()) {
+      const nowMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
+      if (!this._lastHeroSyncMs || nowMs - this._lastHeroSyncMs >= 100) {
+        this._lastHeroSyncMs = nowMs;
+        ns.sendMessage({
+          type: "playerAction",
+          action: { kind: "heroPosition", col: hero.col, row: hero.row },
+        });
+      }
+    }
   }
 }
 
