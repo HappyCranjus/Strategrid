@@ -548,8 +548,18 @@ function startSandbox() {
  * mode for that owner.
  */
 function buildSandboxControls() {
-  const container = document.getElementById("deckButtons");
-  if (!container) return;
+  // The shared deck-button container was removed from game.html when the
+  // side hotkey rails took over normal play modes. Sandbox is the only mode
+  // that still needs a full per-player roster panel, so create one on demand
+  // and mount it under #hud-bottom.
+  let container = document.getElementById("deckButtons");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "deckButtons";
+    const hud = document.getElementById("hud-bottom");
+    if (hud && hud.parentNode) hud.parentNode.insertBefore(container, hud.nextSibling);
+    else document.body.appendChild(container);
+  }
 
   container.innerHTML = `
     <div id="sandboxPlayers" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
