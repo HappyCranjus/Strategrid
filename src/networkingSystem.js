@@ -149,19 +149,26 @@ class NetworkingSystem {
   setupDataChannel() {
     if (!this.dataChannel) return;
 
-    this.dataChannel.on("open", () => {
+    const onOpen = () => {
       console.log("[Networking] Data connection opened");
       this.connectionState = "connected";
 
-      // Process any queued messages
       while (this.messageQueue.length > 0) {
         const message = this.messageQueue.shift();
         this.sendMessage(message);
       }
 
-      // Call connection established callback
       this.onConnectionEstablished();
-    });
+    };
+
+    // PeerJS `on('open')` is a one-shot event. The joiner path resolves
+    // signalingClient.joinRoom() *after* open fires, so a late listener
+    // would never run — fire synchronously when the channel is already open.
+    if (this.dataChannel.open) {
+      onOpen();
+    } else {
+      this.dataChannel.on("open", onOpen);
+    }
 
     this.dataChannel.on("close", () => {
       console.log("[Networking] Data connection closed");
