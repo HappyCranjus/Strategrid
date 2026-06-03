@@ -66,18 +66,27 @@ class GameLoop {
       const gameOver = gameState && gameState.gameOver;
 
       if (!gameOver) {
-        // Order matters: phase first (resource reads gs.phase), influence next
-        // (resource reads tile owners), then resource, then AI (so it spends
-        // current-frame RP/TP), then hero input (so hero positions are current
-        // before troop combat), then movement/combat.
+        // phaseSystem must always tick — it owns the intermission countdown.
+        // Intermissions freeze the rest of the simulation so the deck-pick
+        // modal is uncontested (renderer still runs below for board visibility).
         if (phaseSystem) phaseSystem.update(deltaTime);
-        if (influenceSystem) influenceSystem.update(deltaTime);
-        if (resourceSystem) resourceSystem.update(deltaTime);
-        if (aiController) aiController.update(deltaTime);
-        if (heroInput) heroInput.update(deltaTime);
-        if (troopSystem) troopSystem.update(deltaTime);
-        if (buildingSystem) buildingSystem.update(deltaTime);
-        if (strategemSystem) strategemSystem.update(deltaTime);
+
+        const inIntermission = gameState &&
+          (gameState.phase === "intermission1" || gameState.phase === "intermission2");
+
+        if (!inIntermission) {
+          // Order matters: influence first (resource reads tile owners), then
+          // resource, then AI (so it spends current-frame RP/TP), then hero
+          // input (so hero positions are current before troop combat), then
+          // movement/combat.
+          if (influenceSystem) influenceSystem.update(deltaTime);
+          if (resourceSystem) resourceSystem.update(deltaTime);
+          if (aiController) aiController.update(deltaTime);
+          if (heroInput) heroInput.update(deltaTime);
+          if (troopSystem) troopSystem.update(deltaTime);
+          if (buildingSystem) buildingSystem.update(deltaTime);
+          if (strategemSystem) strategemSystem.update(deltaTime);
+        }
       }
       if (renderer) renderer.render();
     }

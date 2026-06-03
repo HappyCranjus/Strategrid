@@ -165,9 +165,12 @@ class BuildingSystem {
 
     b.attackTimer = 0;
 
-    // Splash on impact.
+    // Splash on impact. Ninja cloak is NOT phase-shifted — splash hits and
+    // reveals her (cloak-break is in applyDamage); other invisible units
+    // (Ambush, Teleport) remain protected.
     for (const t of this.gameState.troops) {
       if (t.owner === b.owner) continue;
+      if ((t.invisible && t.type !== "ninja") || t.inFlight) continue;
       const dx = t.col - target.col;
       const dy = t.row - target.row;
       if (Math.sqrt(dx * dx + dy * dy) <= def.splashRadius) {
@@ -295,6 +298,7 @@ class BuildingSystem {
 
     for (const t of this.gameState.troops) {
       if (t.owner === building.owner) continue;
+      if (t.invisible) continue;
       const dx = t.col - cx;
       const dy = t.row - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -318,6 +322,7 @@ class BuildingSystem {
 
     for (const t of this.gameState.troops) {
       if (t.owner === building.owner) continue;
+      if (t.invisible) continue;
       const dx = t.col - cx;
       const dy = t.row - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -356,6 +361,7 @@ class BuildingSystem {
 
     for (const t of this.gameState.troops) {
       if (t.owner === building.owner) continue;
+      if (t.invisible) continue;
       consider(t, t.col, t.row);
     }
     for (const e of this.gameState.buildings) {

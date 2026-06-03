@@ -116,11 +116,23 @@ class AIController {
     const def = (this.gameLogic.troopTypes || {})[troopType];
     if (!def) return;
     if ((gs.currentRP[this.owner] || 0) < (def.cost || 0)) return;
+    if ((gs.currentTP[this.owner] || 0) < (def.tpCost || 0)) return;
 
-    const tile = this._randomOwnedTile();
+    // Ninjas deploy in the enemy's back column (inverted zone) — the standard
+    // _randomOwnedTile picker would never produce a legal tile for them.
+    const tile = (troopType === "ninja")
+      ? this._randomEnemyBackColTile()
+      : this._randomOwnedTile();
     if (!tile) return;
 
     this.uiState._trySpawnTroop(tile.row, tile.col, this.owner, troopType);
+  }
+
+  _randomEnemyBackColTile() {
+    const gs = this.gameState;
+    const col = (this.owner === "player1") ? gs.cols - 1 : 0;
+    const row = Math.floor(Math.random() * gs.rows);
+    return { row, col };
   }
 
   _randomOwnedTile() {

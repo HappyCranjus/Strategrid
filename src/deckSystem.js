@@ -15,6 +15,11 @@ class DeckSystem {
       "sentinel",
       "bannerman",
       "gustKnight",
+      "grenadier",
+      "invisiWitch",
+      "ninja",
+      "ogre",
+      "warMachine",
     ];
 
     this.availableBuildings = [

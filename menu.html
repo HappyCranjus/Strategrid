@@ -70,6 +70,13 @@
       <div id="deckSaveStatus" style="margin-top: 5px; font-size: 12px; display: none;"></div>
     </div>
 
+    <div id="settingsSection" style="width: 480px; max-width: 95vw;">
+      <h3>Display</h3>
+      <label><input type="checkbox" id="settingShowVision" /> Show vision circles</label>
+      <label><input type="checkbox" id="settingShowRange" /> Show range circles</label>
+    </div>
+
+    <script src="src/settings.js?v=1"></script>
     <script src="src/deckSystem.js?v=2"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
@@ -78,7 +85,7 @@
         const displayNames = {
           swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
           settler: "Settler", brute: "Brute", sentinel: "Sentinel", bannerman: "Bannerman",
-          gustKnight: "Gust Knight",
+          gustKnight: "Gust Knight", grenadier: "Grenadier", invisiWitch: "Invisi-witch", ninja: "Ninja", ogre: "Ogre", warMachine: "War Machine",
           brickMcStick: "Brick McStick", strategia: "Strategia",
           wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
           supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
@@ -180,6 +187,17 @@
             e.preventDefault();
             window.location.href = "game.html?mode=pvc";
           });
+        }
+
+        const vis = document.getElementById("settingShowVision");
+        const rng = document.getElementById("settingShowRange");
+        if (vis && window.userSettings) {
+          vis.checked = window.userSettings.getShowVision();
+          vis.addEventListener("change", () => window.userSettings.setShowVision(vis.checked));
+        }
+        if (rng && window.userSettings) {
+          rng.checked = window.userSettings.getShowRange();
+          rng.addEventListener("change", () => window.userSettings.setShowRange(rng.checked));
         }
       });
     </script>

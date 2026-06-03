@@ -409,7 +409,8 @@ class StrategemSystem {
       let bestD = Infinity;
       for (const t of gs.troops) {
         if (t.owner !== enemyOwner) continue;
-        if (t.invisible || t.garrisonedIn) continue;
+        // Ninja cloak is NOT phase-shifted — Chain Lightning hits and reveals her.
+        if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
         if (hitSet.has(t)) continue;
         const dx = t.col - fromCol;
         const dy = t.row - fromRow;
@@ -690,7 +691,7 @@ class StrategemSystem {
     const dps    = s.dps    != null ? s.dps    : def.dps;
     for (const t of this.gameState.troops) {
       if (t.owner === s.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -705,7 +706,7 @@ class StrategemSystem {
     const centerRow = s.row;
     for (const t of this.gameState.troops) {
       if (t.owner === s.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
       const tc = Math.floor(t.col);
       const tr = Math.floor(t.row);
       if (tc === centerCol && tr === centerRow) {

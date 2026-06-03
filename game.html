@@ -39,9 +39,16 @@
           </div>
         </div>
 
-        <canvas id="gameCanvas" width="700" height="600"></canvas>
+        <!-- Board row: hotkey rails flank the canvas. Rails are populated at runtime
+             by buildHotkeyRails() (src/game.js) with 12 fixed slots top-to-bottom in
+             order 1,2,3,4,5,6,7,8,9,0,<,>. -->
+        <div id="board-row">
+          <aside class="hotkey-rail" id="hotkeyRailLeft" data-owner="player1"></aside>
+          <canvas id="gameCanvas" width="700" height="600"></canvas>
+          <aside class="hotkey-rail" id="hotkeyRailRight" data-owner="player2"></aside>
+        </div>
 
-        <!-- Bottom HUD: local player resources + deck buttons -->
+        <!-- Bottom HUD: local player resources + controls -->
         <div id="hud-bottom">
           <div id="playerResources" class="resource-row">
             <span class="resource-label">You</span>
@@ -53,25 +60,11 @@
             <span class="resource-value tiles-value" id="tilesPlayer">0</span>
           </div>
 
-          <!-- Buttons are generated at runtime from the local player's deck -->
-          <div id="deckButtons">
-            <div class="deck-section">
-              <h4>Troops</h4>
-              <div id="troopButtons" class="button-row"></div>
-            </div>
-            <div class="deck-section">
-              <h4>Buildings</h4>
-              <div id="buildingButtons" class="button-row"></div>
-            </div>
-            <div class="deck-section">
-              <h4>Strategems</h4>
-              <div id="strategemButtons" class="button-row"></div>
-            </div>
-          </div>
-
           <div id="bottomControls">
             <button id="pauseBtn">Pause</button>
             <button id="muteBtn">🔊 Sound</button>
+            <button id="visionToggleBtn" class="toggle-btn">👁 Vision</button>
+            <button id="rangeToggleBtn" class="toggle-btn">⊕ Range</button>
             <div id="spawnModeDisplay"></div>
             <div id="buildModeDisplay"></div>
             <div id="planModeDisplay"></div>
@@ -142,15 +135,16 @@
     <script src="src/troopSystem.js?v=12"></script>
     <script src="src/buildingSystem.js?v=5"></script>
     <script src="src/strategemSystem.js?v=3"></script>
-    <script src="src/renderer.js?v=16"></script>
-    <script src="src/uiState.js?v=4"></script>
+    <script src="src/settings.js?v=1"></script>
+    <script src="src/renderer.js?v=18"></script>
+    <script src="src/uiState.js?v=5"></script>
     <script src="src/signalingClient.js?v=1"></script>
     <script src="src/networkingSystem.js?v=2"></script>
     <script src="src/heroInput.js?v=7"></script>
     <script src="src/gameLoop.js?v=5"></script>
     <script src="src/gameSetup.js?v=5"></script>
     <script src="src/aiController.js?v=1"></script>
-    <script src="src/game.js?v=6"></script>
+    <script src="src/game.js?v=7"></script>
 
     <script>
       // Pause + Mute toggles
@@ -178,6 +172,20 @@
 
         const backBtn = document.getElementById("backToMenuBtn");
         if (backBtn) backBtn.addEventListener("click", () => { window.location.href = "menu.html"; });
+
+        function wireToggle(btnId, getter, setter) {
+          const btn = document.getElementById(btnId);
+          if (!btn || !window.userSettings) return;
+          const sync = () => btn.classList.toggle("toggle-off", !getter());
+          sync();
+          btn.addEventListener("click", () => { setter(!getter()); sync(); });
+        }
+        wireToggle("visionToggleBtn",
+          () => window.userSettings.getShowVision(),
+          (v) => window.userSettings.setShowVision(v));
+        wireToggle("rangeToggleBtn",
+          () => window.userSettings.getShowRange(),
+          (v) => window.userSettings.setShowRange(v));
       });
     </script>
   </body>

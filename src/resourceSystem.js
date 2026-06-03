@@ -14,31 +14,61 @@ class ResourceSystem {
   update(deltaTime) {
     if (!this.gameState) return;
     const gs = this.gameState;
-    const maxRP = 10;
-    const maxTP = 5;
 
-    // Phase-keyed [base, scalePerTile]. Intermissions pause RP generation while
-    // players pick from the roster; flip to opening/assault rates to carry over.
+    // Phase-keyed caps grow with the game; phase-keyed RP rates unchanged.
+    // Intermissions hold the prior phase's cap so the bar doesn't jump mid-draft.
+    // Sandbox sets its own 50/20 caps at startup — defer to the gs value there
+    // instead of overwriting every frame.
+    const isSandbox = gs.gameMode === "sandbox";
+    const caps = ResourceSystem.PHASE_CAPS[gs.phase] || { rp: 10, tp: 5 };
+    const maxRP = isSandbox ? (gs.maxRP.player1 || caps.rp) : caps.rp;
+    const maxTP = isSandbox ? (gs.maxTP.player1 || caps.tp) : caps.tp;
     const [base, scale] = ResourceSystem.PHASE_RATES[gs.phase] || [0, 0];
 
-    // Tally tile ownership across the 16x18 grid (288 cells; cheap per frame).
-    let p1Tiles = 0;
-    let p2Tiles = 0;
+    // Single pass over the grid: tally current ownership AND count each
+    // player's lost initial tiles (initial owner != current owner).
+    let p1Tiles = 0, p2Tiles = 0;
+    let p1Lost = 0,  p2Lost = 0;
+    const initOwners = gs.initialTileOwner || {};
     for (let r = 0; r < gs.rows; r++) {
       for (let c = 0; c < gs.cols; c++) {
         const o = gs.grid[r][c].owner;
         if (o === "player1") p1Tiles++;
         else if (o === "player2") p2Tiles++;
+
+        const initOwner = initOwners[r + "," + c];
+        if (initOwner && initOwner !== o) {
+          if (initOwner === "player1") p1Lost++;
+          else if (initOwner === "player2") p2Lost++;
+        }
       }
     }
     const tileCounts = { player1: p1Tiles, player2: p2Tiles };
+    const lostCounts = { player1: p1Lost, player2: p2Lost };
 
+    // TP: base 0.125/s (1 TP per 8s). Comeback bonus scales linearly with
+    // lost-initial-tile fraction up to +100% at full overrun → 0.25/s cap.
+    const TP_BASE = 0.125;
     const rates = {};
+    const tpRates = {};
     for (const player of ["player1", "player2"]) {
       const rate = base + scale * tileCounts[player];
       rates[player] = rate;
       gs.currentRP[player] = Math.min((gs.currentRP[player] || 0) + rate * deltaTime, maxRP);
-      gs.currentTP[player] = Math.min((gs.currentTP[player] || 0) + 0.05 * deltaTime, maxTP);
+
+      const initCount = (gs.initialTileCount && gs.initialTileCount[player]) || 1;
+      const tpBonus = TP_BASE * (lostCounts[player] / initCount);
+      const tpRate = TP_BASE + tpBonus;
+      tpRates[player] = tpRate;
+      gs.currentTP[player] = Math.min((gs.currentTP[player] || 0) + tpRate * deltaTime, maxTP);
+    }
+
+    // Keep gs.maxRP/maxTP in sync so building production caps (buildingSystem
+    // reads gs.maxRP[owner]) and any other readers see the phase-aware ceiling.
+    // Skip in sandbox so its dev-mode 50/20 caps aren't clobbered.
+    if (!isSandbox) {
+      gs.maxRP.player1 = gs.maxRP.player2 = maxRP;
+      gs.maxTP.player1 = gs.maxTP.player2 = maxTP;
     }
 
     // Update HTML resource bars. The local-vs-opponent mapping is wired in Phase C
@@ -75,11 +105,21 @@ class ResourceSystem {
 }
 
 ResourceSystem.PHASE_RATES = {
-  opening:       [1.0,  0.003],
-  assault:       [1.25, 0.005],
-  endgame:       [2.0,  0.007],
-  intermission1: [0,    0],
-  intermission2: [0,    0],
+  opening:       [0.70,  0.0021],
+  assault:       [0.875, 0.0035],
+  endgame:       [1.40,  0.0049],
+  intermission1: [0,     0],
+  intermission2: [0,     0],
+};
+
+// Caps grow with the game so RP feels less "always full" and TP can be
+// stockpiled for combos late. Intermissions inherit the prior phase's cap.
+ResourceSystem.PHASE_CAPS = {
+  opening:       { rp: 10, tp: 5   },
+  intermission1: { rp: 10, tp: 5   },
+  assault:       { rp: 15, tp: 7.5 },
+  intermission2: { rp: 15, tp: 7.5 },
+  endgame:       { rp: 20, tp: 10  },
 };
 
 // Export for browser

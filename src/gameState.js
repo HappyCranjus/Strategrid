@@ -30,6 +30,11 @@ class GameState {
     this.maxRP    = { player1: 10, player2: 10 };
     this.maxTP    = { player1: 5,  player2: 5 };
 
+    // Snapshot of each player's starting tiles, used by resourceSystem to
+    // scale TP generation by how much home turf has been overrun (comeback).
+    this.initialTileCount = { player1: 0, player2: 0 };
+    this.initialTileOwner = {}; // "r,c" -> "player1" | "player2"
+
     this.gameMode = "single"; // single, pvp, training
     this.paused = false;
     this.phase = "opening"; // opening, intermission1, assault, intermission2, endgame
@@ -63,6 +68,8 @@ class GameState {
     this.currentTP = { player1: 3, player2: 3 };
     this.maxRP    = { player1: 10, player2: 10 };
     this.maxTP    = { player1: 5,  player2: 5 };
+    this.initialTileCount = { player1: 0, player2: 0 };
+    this.initialTileOwner = {};
     this.phase = "opening";
     this.matchTime = 0;
     this.phaseDuration = 0;
@@ -132,6 +139,20 @@ class GameState {
         for (let r = 0; r < this.rows; r++) {
           this.grid[r][c].influence = band.influence;
           this.grid[r][c].owner = band.owner;
+        }
+      }
+    }
+
+    // Snapshot home turf for resourceSystem's TP comeback bonus. Fixed at
+    // game start — does not update as tiles flip during play.
+    this.initialTileCount = { player1: 0, player2: 0 };
+    this.initialTileOwner = {};
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const o = this.grid[r][c].owner;
+        if (o === "player1" || o === "player2") {
+          this.initialTileCount[o]++;
+          this.initialTileOwner[r + "," + c] = o;
         }
       }
     }

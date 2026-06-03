@@ -38,10 +38,9 @@ class UIState {
     this.cursorCol = null;
     this.cursorRow = null;
 
-    this.updateUIForDeck();
     this._setupCanvasClickHandler();
     this._setupCanvasMoveHandler();
-    this._setupTroopHotkeys();
+    this._setupDeckHotkeys();
   }
 
   /** Cursor tracking so renderer can draw a ghost preview of the active mode */
@@ -106,7 +105,21 @@ class UIState {
       troop.activationDuration = 1.2;
     }
 
+    if (troopType === "ninja") {
+      const def = (this.gameLogic.troopTypes || {}).ninja || {};
+      const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+      troop.invisible    = true;
+      troop.cloakActive  = true;
+      troop.cloakedUntil = now + (def.spawnCloakDuration || 5.0);
+      // First attack MUST be a katana — suppress shurikens until she closes
+      // to melee and lands the opener. The opener also gets a +50% bonus
+      // (applied in troopSystem when the attack fires).
+      troop.firstAttackPending = true;
+    }
+
     gs.currentRP[owner] -= (troop.cost || 0);
+    const tpCost = ((this.gameLogic.troopTypes || {})[troopType] || {}).tpCost || 0;
+    if (tpCost > 0) gs.currentTP[owner] -= tpCost;
     gs.troops.push(troop);
     const am = window.gameSetupResult && window.gameSetupResult.audioManager;
     if (am) am.playTroopSpawn(troop);
@@ -126,11 +139,22 @@ class UIState {
       Number.isInteger(col) && Number.isInteger(row) &&
       col >= 0 && col < gs.cols && row >= 0 && row < gs.rows;
     const tileOwner = inBounds ? gs.grid[row][col].owner : null;
-    const zoneOK = inBounds && tileOwner === owner;
+    // The Ninja's zone rule is inverted: she infiltrates the enemy's back
+    // column (col 0 for player2's rear, gs.cols-1 for player1's rear). All
+    // other troops deploy on tiles their owner controls via influence.
+    let zoneOK;
+    if (troopType === "ninja") {
+      const enemyBackCol = (owner === "player1") ? gs.cols - 1 : 0;
+      zoneOK = inBounds && col === enemyBackCol;
+    } else {
+      zoneOK = inBounds && tileOwner === owner;
+    }
 
     const def = (this.gameLogic.troopTypes || {})[troopType] || {};
     const cost = def.cost || 0;
-    const affordOK = (gs.currentRP[owner] || 0) >= cost;
+    const tpCost = def.tpCost || 0;
+    const affordOK = (gs.currentRP[owner] || 0) >= cost
+                  && (gs.currentTP[owner] || 0) >= tpCost;
 
     const frontier = this._turretFrontierCol(owner);
     const instant = frontier !== null && (
@@ -290,6 +314,21 @@ class UIState {
   }
 
   /**
+   * Toggle build mode: pressing the same building deselects; a different one
+   * switches. Mirrors toggleSpawnMode so hotkey/mouse behavior stays consistent.
+   */
+  toggleBuildMode(owner, buildingType) {
+    if (this.buildMode &&
+        this.buildMode.owner === owner &&
+        this.buildMode.buildingType === buildingType) {
+      this.buildMode = null;
+      this._refreshDeckButtonHighlight();
+    } else {
+      this.setBuildMode(owner, buildingType);
+    }
+  }
+
+  /**
    * Set strategem mode for a player. Refused (silent) if the strategem is on
    * cooldown — the user can re-click once the radial sweep clears.
    * @param {string} owner - Player ID
@@ -309,6 +348,22 @@ class UIState {
   }
 
   /**
+   * Toggle strategem mode: pressing the same strategem deselects; a different
+   * one switches. Cooldown gate lives inside setStrategemMode so re-press while
+   * cooling is a no-op (not a disarm).
+   */
+  toggleStrategemMode(owner, strategemType) {
+    if (this.strategemMode &&
+        this.strategemMode.owner === owner &&
+        this.strategemMode.strategemType === strategemType) {
+      this.strategemMode = null;
+      this._refreshDeckButtonHighlight();
+    } else {
+      this.setStrategemMode(owner, strategemType);
+    }
+  }
+
+  /**
    * Clear all modes
    */
   clearModes() {
@@ -320,21 +375,54 @@ class UIState {
   }
 
   _refreshDeckButtonHighlight() {
-    const container = document.getElementById("troopButtons");
-    if (!container) return;
-    const activeType = this.spawnMode ? this.spawnMode.troopType : null;
-    container.querySelectorAll("button").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.troopType === activeType);
+    // Owner-scoped so sandbox (both players interactive) doesn't bleed one
+    // player's active selection onto the other rail's matching slot.
+    const sp = this.spawnMode;       // { owner, troopType } | null
+    const bu = this.buildMode;       // { owner, buildingType } | null
+    const st = this.strategemMode;   // { owner, strategemType } | null
+
+    document.querySelectorAll(".hotkey-slot").forEach((slot) => {
+      const owner = slot.dataset.owner;
+      const active =
+        (sp && owner === sp.owner && slot.dataset.troopType    === sp.troopType)    ||
+        (bu && owner === bu.owner && slot.dataset.buildingType === bu.buildingType) ||
+        (st && owner === st.owner && slot.dataset.strategemType === st.strategemType);
+      slot.classList.toggle("active", !!active);
     });
   }
 
-  _setupTroopHotkeys() {
-    const owned = new Set(["1", "2", "3", "4"]);
+  /**
+   * Single key handler that fans out across the local player's full deck:
+   *   1-6 → troops (4 starting + 1 per intermission, max 6)
+   *   7-0 → strategems (2 starting + 1 per intermission, max 4)
+   *   < / , → building 1, > / . → building 2 (deck size fixed at 2)
+   * Shifted and unshifted punctuation both bind so no Shift is required.
+   */
+  _setupDeckHotkeys() {
+    // Map: keyboard key -> { kind, slot } where slot is the 0-based index into
+    // the corresponding deck array.
+    const map = {
+      "1": { kind: "troop", slot: 0 },
+      "2": { kind: "troop", slot: 1 },
+      "3": { kind: "troop", slot: 2 },
+      "4": { kind: "troop", slot: 3 },
+      "5": { kind: "troop", slot: 4 },
+      "6": { kind: "troop", slot: 5 },
+      "7": { kind: "strategem", slot: 0 },
+      "8": { kind: "strategem", slot: 1 },
+      "9": { kind: "strategem", slot: 2 },
+      "0": { kind: "strategem", slot: 3 },
+      ",": { kind: "building", slot: 0 },
+      "<": { kind: "building", slot: 0 },
+      ".": { kind: "building", slot: 1 },
+      ">": { kind: "building", slot: 1 },
+    };
+
     window.addEventListener("keydown", (e) => {
-      if (!owned.has(e.key)) return;
+      const entry = map[e.key];
+      if (!entry) return;
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      e.preventDefault();
 
       const gs = this.gameState;
       if (!gs || gs.gameOver) return;
@@ -345,97 +433,21 @@ class UIState {
 
       const ds = window.deckSystem;
       const deck = ds && ds.getPlayerDeck && ds.getPlayerDeck(localId);
-      const troopType = deck && deck.troops && deck.troops[parseInt(e.key, 10) - 1];
-      if (!troopType) return;
+      if (!deck) return;
 
-      this.toggleSpawnMode(localId, troopType);
+      const arrayKey = entry.kind === "troop" ? "troops"
+                     : entry.kind === "building" ? "buildings"
+                     : "strategems";
+      const item = deck[arrayKey] && deck[arrayKey][entry.slot];
+      if (!item) return;
+
+      e.preventDefault();
+      if (entry.kind === "troop") this.toggleSpawnMode(localId, item);
+      else if (entry.kind === "building") this.toggleBuildMode(localId, item);
+      else this.toggleStrategemMode(localId, item);
     });
   }
 
-  /**
-   * Update UI to show/hide buttons based on deck
-   */
-  updateUIForDeck() {
-    // Get current player (default to player1 for UI)
-    const currentPlayer = this.gameState.getCurrentPlanningPlayer() || "player1";
-
-    // In PvP mode, only update UI for the local player to avoid interfering with opponent's deck
-    const isPvPMode = this.gameState.gameMode === "pvp";
-    const localPlayerId = this.networkingSystem ? this.networkingSystem.getLocalPlayerId() : currentPlayer;
-
-    // Hide/lock unavailable items based on deck
-    const troopButtons = document.querySelectorAll("[data-troop-type]");
-    troopButtons.forEach((button) => {
-      const type = button.getAttribute("data-troop-type");
-      const owner = button.getAttribute("data-owner") || currentPlayer;
-
-      // In PvP mode, only check deck for local player's buttons
-      if (isPvPMode && owner !== localPlayerId) {
-        // Don't check opponent's deck - just show/hide based on whether it's the local player
-        if (owner === localPlayerId) {
-          button.style.display = "";
-        }
-        return;
-      }
-
-      if (this.deckSystem && !this.deckSystem.isTroopInDeck(owner, type)) {
-        button.style.display = "none";
-      } else {
-        button.style.display = "";
-        button.style.opacity = "1";
-        button.style.cursor = "pointer";
-        button.title = "";
-      }
-    });
-
-    const buildingButtons = document.querySelectorAll("[data-building-type]");
-    buildingButtons.forEach((button) => {
-      const type = button.getAttribute("data-building-type");
-      const owner = button.getAttribute("data-owner") || currentPlayer;
-
-      // In PvP mode, only check deck for local player's buttons
-      if (isPvPMode && owner !== localPlayerId) {
-        // Don't check opponent's deck - just show/hide based on whether it's the local player
-        if (owner === localPlayerId) {
-          button.style.display = "";
-        }
-        return;
-      }
-
-      if (this.deckSystem && !this.deckSystem.isBuildingInDeck(owner, type)) {
-        button.style.display = "none";
-      } else {
-        button.style.display = "";
-        button.style.opacity = "1";
-        button.style.cursor = "pointer";
-        button.title = "";
-      }
-    });
-
-    const strategemButtons = document.querySelectorAll("[data-strategem-type]");
-    strategemButtons.forEach((button) => {
-      const type = button.getAttribute("data-strategem-type");
-      const owner = button.getAttribute("data-owner") || currentPlayer;
-
-      // In PvP mode, only check deck for local player's buttons
-      if (isPvPMode && owner !== localPlayerId) {
-        // Don't check opponent's deck - just show/hide based on whether it's the local player
-        if (owner === localPlayerId) {
-          button.style.display = "";
-        }
-        return;
-      }
-
-      if (this.deckSystem && !this.deckSystem.isStrategemInDeck(owner, type)) {
-        button.style.display = "none";
-      } else {
-        button.style.display = "";
-        button.style.opacity = "1";
-        button.style.cursor = "pointer";
-        button.title = "";
-      }
-    });
-  }
 }
 
 // Export for browser
