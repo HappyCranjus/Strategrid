@@ -83,7 +83,7 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
       gameLoop.start();
 
       // Once decks are settled (deck sync arrives shortly after connect), populate deck buttons.
-      setTimeout(() => buildDeckButtons(networkingSystem), 200);
+      setTimeout(() => buildHotkeyRails(networkingSystem), 200);
     }, 800);
   };
 
@@ -181,109 +181,172 @@ async function startMatchmaking(networkingSystem, statusText) {
   if (statusText) statusText.textContent = "Open matchmaking not yet implemented — use Room Code mode.";
 }
 
-/**
- * Generate deck buttons in the bottom HUD from the local player's deck.
- * Replaces the old static per-player control panels and compact-controls duplication.
- */
-function buildDeckButtons(networkingSystem) {
-  const localPlayerId = networkingSystem
-    ? networkingSystem.getLocalPlayerId()
-    : "player1";
+// Display labels keyed by troop / building / strategem / hero-ability identifier.
+// Used by both rails. Anything missing falls back to the raw camelCase key.
+const DECK_DISPLAY_NAMES = {
+  swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
+  settler: "Settler", brute: "Brute", sentinel: "Sentinel",
+  bannerman: "Bannerman", gustKnight: "Gust Knight", grenadier: "Grenadier",
+  invisiWitch: "Invisi Witch", ninja: "Ninja", ogre: "Ogre",
+  warMachine: "War Machine", commando: "Commando",
+  skeleton: "Skeleton", zombie: "Zombie",
+  wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
+  supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
+  chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
+  heal: "Heal Burst", wind: "Wind", necromancy: "Necromancy", ruin: "Ruin",
+  blast: "Blast", chainLightning: "Chain Lightning", gravityField: "Gravity Field",
+  lesserTeleport: "Lesser Teleport", greaterTeleport: "Greater Teleport",
+  chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
+  summoningStrike: "Summoning Strike", ambush: "Ambush",
+};
 
-  const troopContainer    = document.getElementById("troopButtons");
-  const buildingContainer = document.getElementById("buildingButtons");
-  const strategemContainer = document.getElementById("strategemButtons");
-  if (!troopContainer || !buildingContainer || !strategemContainer) return;
+// Hotkey + kind for each of the 12 fixed rail positions, top → bottom.
+// Order matches the user-facing keyboard layout: troops, strategems, buildings.
+const RAIL_POSITIONS = [
+  { key: "1", kind: "troop",     deckIndex: 0 },
+  { key: "2", kind: "troop",     deckIndex: 1 },
+  { key: "3", kind: "troop",     deckIndex: 2 },
+  { key: "4", kind: "troop",     deckIndex: 3 },
+  { key: "5", kind: "troop",     deckIndex: 4 },
+  { key: "6", kind: "troop",     deckIndex: 5 },
+  { key: "7", kind: "strategem", deckIndex: 0 },
+  { key: "8", kind: "strategem", deckIndex: 1 },
+  { key: "9", kind: "strategem", deckIndex: 2 },
+  { key: "0", kind: "strategem", deckIndex: 3 },
+  { key: "<", kind: "building",  deckIndex: 0 },
+  { key: ">", kind: "building",  deckIndex: 1 },
+];
 
-  const deck = (window.deckSystem && window.deckSystem.getPlayerDeck(localPlayerId)) || {
+function _railCostLabel(kind, key) {
+  const gl = window.gameLogic;
+  if (!gl) return "";
+  const def = kind === "troop"    ? gl.troopTypes[key]
+            : kind === "building" ? gl.buildingTypes[key]
+            :                       gl.strategemTypes[key];
+  if (!def) return "";
+  if (kind === "troop")    return `${def.cost} RP`;
+  if (kind === "building") return def.tpCost ? `${def.cost} RP + ${def.tpCost} TP` : `${def.cost} RP`;
+  return `${def.tpCost} TP`;
+}
+
+// Render a non-troop slot icon as a colored letter-glyph circle. Distinct
+// palettes for buildings vs strategems make the row strips visually
+// separable even before custom icons arrive.
+function _railGlyphHTML(kind, key) {
+  const label = (DECK_DISPLAY_NAMES[key] || key).replace(/[^A-Za-z]/g, "").slice(0, 1).toUpperCase() || "?";
+  const bg = kind === "building" ? "#8a6d3b" : kind === "strategem" ? "#6a4cb8" : "#555";
+  return `<span class="glyph" style="background:${bg}">${label}</span>`;
+}
+
+function _railIconHTML(kind, key, owner) {
+  if (kind === "troop") {
+    const sprites = window.troopSpriteFiles && window.troopSpriteFiles[key];
+    const file = sprites && sprites[owner];
+    if (file) return `<img src="images/${file}" alt="${DECK_DISPLAY_NAMES[key] || key}">`;
+  }
+  return _railGlyphHTML(kind, key);
+}
+
+function _buildSlot(pos, item, owner, interactive) {
+  const slot = document.createElement("div");
+  slot.className = "hotkey-slot";
+  slot.dataset.owner = owner;
+
+  if (!item) {
+    slot.classList.add("empty");
+    slot.innerHTML = `<span class="slot-key">${pos.key}</span><div class="slot-icon"></div><div class="slot-name">—</div><div class="slot-cost"></div>`;
+    return slot;
+  }
+
+  if (pos.kind === "troop")          slot.dataset.troopType = item;
+  else if (pos.kind === "building")  slot.dataset.buildingType = item;
+  else                               slot.dataset.strategemType = item;
+
+  const name = DECK_DISPLAY_NAMES[item] || item;
+  const cost = _railCostLabel(pos.kind, item);
+  slot.innerHTML =
+    `<span class="slot-key">${pos.key}</span>` +
+    `<div class="slot-icon">${_railIconHTML(pos.kind, item, owner)}</div>` +
+    `<div class="slot-name">${name}</div>` +
+    `<div class="slot-cost">${cost}</div>`;
+
+  if (interactive) {
+    slot.addEventListener("click", () => {
+      const ui = window.gameSetupResult && window.gameSetupResult.uiState;
+      const gs = window.gameSetupResult && window.gameSetupResult.gameState;
+      if (!ui || !gs) return;
+      if (pos.kind === "troop"     && gs.canPlayerAct(owner)) ui.toggleSpawnMode(owner, item);
+      else if (pos.kind === "building" && gs.canPlayerAct(owner)) ui.toggleBuildMode(owner, item);
+      else if (pos.kind === "strategem") ui.toggleStrategemMode(owner, item);
+    });
+  }
+  return slot;
+}
+
+function _appendHeroAbilityTile(rail, owner) {
+  const gs = window.gameSetupResult && window.gameSetupResult.gameState;
+  const gl = window.gameLogic;
+  if (!gs || !gl || !gl.getHeroAbility) return;
+  const hero = owner === "player1" ? gs.hero1 : gs.hero2;
+  if (!hero) return;
+  const def = gl.getHeroAbility(hero.type);
+  if (!def) return;
+
+  const tile = document.createElement("div");
+  tile.className = "hotkey-slot hero-ability-tile";
+  tile.dataset.owner = owner;
+  tile.dataset.heroAbilityKey = def.key;
+  tile.dataset.heroType = hero.type;
+  const name = DECK_DISPLAY_NAMES[def.key] || def.key;
+  tile.innerHTML =
+    `<span class="slot-key">␣</span>` +
+    `<div class="slot-icon">${_railGlyphHTML("strategem", def.key)}</div>` +
+    `<div class="slot-name">${name}</div>` +
+    `<div class="slot-cost">${def.tpCost} TP</div>`;
+  tile.addEventListener("click", () => {
+    if (window.strategemSystem) window.strategemSystem.tryActivateHeroAbility(owner);
+  });
+  rail.appendChild(tile);
+}
+
+function _populateRail(rail, owner, interactive) {
+  const deck = (window.deckSystem && window.deckSystem.getPlayerDeck(owner)) || {
     troops: [], buildings: [], strategems: [],
   };
+  rail.innerHTML = "";
+  for (const pos of RAIL_POSITIONS) {
+    const arr = pos.kind === "troop" ? deck.troops
+              : pos.kind === "building" ? deck.buildings
+              : deck.strategems;
+    const item = arr ? arr[pos.deckIndex] : null;
+    rail.appendChild(_buildSlot(pos, item, owner, interactive));
+  }
+  if (interactive) _appendHeroAbilityTile(rail, owner);
+}
 
-  const displayNames = {
-    swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
-    settler: "Settler", brute: "Brute", sentinel: "Sentinel",
-    wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
-    supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
-    chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
-    heal: "Heal Burst", wind: "Wind", necromancy: "Necromancy", ruin: "Ruin",
-    blast: "Blast", chainLightning: "Chain Lightning", gravityField: "Gravity Field",
-    lesserTeleport: "Lesser Teleport", greaterTeleport: "Greater Teleport",
-    chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
-    summoningStrike: "Summoning Strike", ambush: "Ambush",
-  };
-
-  const costLabel = (kind, key) => {
-    const gl = window.gameLogic;
-    if (!gl) return "";
-    const def = kind === "troop" ? gl.troopTypes[key]
-              : kind === "building" ? gl.buildingTypes[key]
-              : gl.strategemTypes[key];
-    if (!def) return "";
-    if (kind === "troop")    return `${def.cost} RP`;
-    if (kind === "building") return def.tpCost ? `${def.cost} RP + ${def.tpCost} TP` : `${def.cost} RP`;
-    return `${def.tpCost} TP`;
-  };
-
-  troopContainer.innerHTML = "";
-  buildingContainer.innerHTML = "";
-  strategemContainer.innerHTML = "";
-
-  const ui = window.gameSetupResult && window.gameSetupResult.uiState;
+/**
+ * Render the two side rails (P1 left, P2 right). Each rail has 12 fixed slots
+ * top-to-bottom in order 1,2,3,4,5,6,7,8,9,0,<,>. The opponent rail is dimmed
+ * and non-interactive outside sandbox so you can still glance at their kit +
+ * strategem cooldowns. Click handlers + cooldown overlays + hotkey highlights
+ * all key off the same data-* attributes the old #deckButtons buttons used,
+ * so renderer._drawStrategemCooldowns + uiState._setupDeckHotkeys keep working.
+ */
+function buildHotkeyRails(networkingSystem) {
+  const localPlayerId = networkingSystem ? networkingSystem.getLocalPlayerId() : "player1";
   const gs = window.gameSetupResult && window.gameSetupResult.gameState;
+  const isSandbox = gs && gs.gameMode === "sandbox";
 
-  let troopIdx = 0;
-  for (const t of deck.troops || []) {
-    troopIdx++;
-    const btn = document.createElement("button");
-    btn.textContent = `[${troopIdx}] ${displayNames[t] || t} (${costLabel("troop", t)})`;
-    btn.dataset.troopType = t;
-    btn.dataset.owner = localPlayerId;
-    btn.addEventListener("click", () => {
-      if (ui && gs && gs.canPlayerAct(localPlayerId)) ui.toggleSpawnMode(localPlayerId, t);
-    });
-    troopContainer.appendChild(btn);
-  }
-  for (const b of deck.buildings || []) {
-    const btn = document.createElement("button");
-    btn.textContent = `${displayNames[b] || b} (${costLabel("building", b)})`;
-    btn.dataset.buildingType = b;
-    btn.dataset.owner = localPlayerId;
-    btn.addEventListener("click", () => {
-      if (ui && gs && gs.canPlayerAct(localPlayerId)) ui.setBuildMode(localPlayerId, b);
-    });
-    buildingContainer.appendChild(btn);
-  }
-  for (const s of deck.strategems || []) {
-    const btn = document.createElement("button");
-    btn.textContent = `${displayNames[s] || s} (${costLabel("strategem", s)})`;
-    btn.dataset.strategemType = s;
-    btn.dataset.owner = localPlayerId;
-    btn.addEventListener("click", () => {
-      if (ui) ui.setStrategemMode(localPlayerId, s);
-    });
-    strategemContainer.appendChild(btn);
-  }
-
-  // Hero ability button (SPACEBAR alias). One per local hero, appended into
-  // the strategem row so the cooldown overlay machinery picks it up uniformly.
-  const localHero = (localPlayerId === "player1") ? (gs && gs.hero1) : (gs && gs.hero2);
-  const gl = window.gameLogic;
-  if (localHero && gl && gl.getHeroAbility) {
-    const abilityDef = gl.getHeroAbility(localHero.type);
-    if (abilityDef) {
-      const btn = document.createElement("button");
-      const label = displayNames[abilityDef.key] || abilityDef.key;
-      btn.textContent = `[Space] ${label} (${abilityDef.tpCost} TP)`;
-      btn.dataset.heroAbilityKey = abilityDef.key;
-      btn.dataset.heroType = localHero.type;
-      btn.dataset.owner = localPlayerId;
-      btn.addEventListener("click", () => {
-        if (window.strategemSystem) window.strategemSystem.tryActivateHeroAbility(localPlayerId);
-      });
-      strategemContainer.appendChild(btn);
-    }
+  for (const owner of ["player1", "player2"]) {
+    const railId = owner === "player1" ? "hotkeyRailLeft" : "hotkeyRailRight";
+    const rail = document.getElementById(railId);
+    if (!rail) continue;
+    const interactive = isSandbox || owner === localPlayerId;
+    rail.classList.toggle("dimmed", !interactive);
+    _populateRail(rail, owner, interactive);
   }
 }
+
 
 // ─── PvC (Player vs Computer) mode ───────────────────────────────────────────
 // Bypasses networking. Player1 = human (saved deck, normal HUD). Player2 = AI
@@ -314,8 +377,7 @@ function startPvC() {
   );
   window.gameSetupResult.aiController = ai;
 
-  buildDeckButtons(null);
-  if (window.gameSetupResult.uiState) window.gameSetupResult.uiState.updateUIForDeck();
+  buildHotkeyRails(null);
 
   installIntermissionOverlay();
   installPhaseTimerHUD();
@@ -361,10 +423,7 @@ function installIntermissionOverlay() {
     } else if (INTERMISSION_PHASES.has(lastPhase)) {
       if (!confirmedThisRound) autoPickIntermission(ds, "player1");
       hideIntermissionModal();
-      buildDeckButtons(null);
-      if (window.gameSetupResult && window.gameSetupResult.uiState) {
-        window.gameSetupResult.uiState.updateUIForDeck();
-      }
+      buildHotkeyRails(null);
     }
 
     lastPhase = phase;
@@ -432,10 +491,7 @@ function showIntermissionModal(ds, onConfirm) {
     ds.addTroop("player1", chosenTroop);
     ds.addStrategem("player1", chosenStrat);
     hideIntermissionModal();
-    buildDeckButtons(null);
-    if (window.gameSetupResult && window.gameSetupResult.uiState) {
-      window.gameSetupResult.uiState.updateUIForDeck();
-    }
+    buildHotkeyRails(null);
     if (typeof onConfirm === "function") onConfirm();
   });
 }
@@ -691,12 +747,16 @@ function buildDebugPanel() {
         const over = gameState && gameState.gameOver;
         if (!over) {
           if (phaseSystem) phaseSystem.update(dt);
-          if (influenceSystem) influenceSystem.update(dt);
-          if (resourceSystem) resourceSystem.update(dt);
-          if (heroInput) heroInput.update(dt);
-          if (troopSystem) troopSystem.update(dt);
-          if (buildingSystem) buildingSystem.update(dt);
-          if (strategemSystem) strategemSystem.update(dt);
+          const inIntermission = gameState &&
+            (gameState.phase === "intermission1" || gameState.phase === "intermission2");
+          if (!inIntermission) {
+            if (influenceSystem) influenceSystem.update(dt);
+            if (resourceSystem) resourceSystem.update(dt);
+            if (heroInput) heroInput.update(dt);
+            if (troopSystem) troopSystem.update(dt);
+            if (buildingSystem) buildingSystem.update(dt);
+            if (strategemSystem) strategemSystem.update(dt);
+          }
         }
         if (renderer) renderer.render();
       }

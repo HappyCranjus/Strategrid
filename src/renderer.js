@@ -13,11 +13,22 @@ const troopSpriteFiles = {
   sentinel:     { player1: "blueSentinel.jpg",  player2: "redSentinel.jpg" },
   brute:        { player1: "blueBrute.jpg",     player2: "redBrute2.png" },
   bannerman:    { player1: "Blue_Bannerman.png", player2: "Red_Bannerman.png" },
-  gustKnight:   { player1: "Blue_GustKnight.png", player2: "Red_GustKnight.png" },
+  gustKnight:   { player1: "blue_gustknight.png", player2: "red_gustknight.png" },
+  grenadier:    { player1: "Blue_Grenadier.png", player2: "Red_Grenadier.png" },
+  invisiWitch:  { player1: "blue_invisiwitch.png", player2: "red_invisiwitch.png" },
+  ninja:        { player1: "blue_ninja.png",     player2: "red_ninja.png" },
+  ogre:         { player1: "blue_ogre.png",      player2: "red_ogre.png" },
+  warMachine:   { player1: "blue_warmachine.png", player2: "red_warmachine.png" },
+  commando:     { player1: "blue_commando.png",  player2: "red_commando.png" },
+  zombie:       { player1: "blue_zombie.png",    player2: "red_zombie.png" },
   skeleton:     { player1: "Blue_Skeleton.png", player2: "Red_Skeleton.png" },
   brickMcStick: { player1: "BrickMcStick_Blue.png", player2: "BrickMcStick_Red.png" },
   strategia:    { player1: "Strategia_Blue.png",    player2: "Strategia_Red.png" },
 };
+
+// Expose for the hotkey rails in game.js (which need sprite paths to draw
+// troop icons in each slot without duplicating this map).
+window.troopSpriteFiles = troopSpriteFiles;
 
 /**
  * Renderer - Handles game rendering
@@ -322,15 +333,22 @@ class Renderer {
       // so the player can still see the silhouette as it moves.
       if (t.garrisonedIn) continue;
       if (t.invisible && !t.cloakActive) continue;
-      const cloakAlpha = (t.invisible && t.cloakActive) ? 0.35 : 1.0;
+      // In-flight troops piggyback on the invisible+cloakActive flags so the
+      // gameplay filters skip them. Override the alpha so they still render
+      // fully opaque (and lift the draw Y to trace the parabolic arc).
+      const cloakAlpha = t.inFlight ? 1.0 : ((t.invisible && t.cloakActive) ? 0.35 : 1.0);
       ctx.save();
       ctx.globalAlpha = cloakAlpha;
       const cx = (t.col + 0.5) * ts;
-      const cy = (t.row + 0.5) * ts;
+      const cy = (t.row + 0.5) * ts - (t.thrownArcLift || 0) * ts;
       const inactive = t.active === false;
       const isHero = !!t.isHero;
-      const auraR  = isHero ? ts * 0.75 : ts * 0.5;
-      const boxSize = isHero ? ts * 2.0 : ts * 1.3;
+      // Per-troop displaySize override (e.g., Ogre at 2.0 = hero-sized body
+      // without becoming a hero). Falls back to hero/normal defaults.
+      const def = window.troopTypes ? window.troopTypes[t.type] : null;
+      const displaySize = (def && def.displaySize) || (isHero ? 2.0 : 1.3);
+      const boxSize = ts * displaySize;
+      const auraR   = ts * displaySize * 0.375;
 
       // Owner aura — keeps blue/red ownership readable under busy sprite art.
       // Heroes get a larger, brighter ring so they're easy to spot.
@@ -1018,39 +1036,47 @@ class Renderer {
    * Skipped entirely for range-0/vision-0 utility units (e.g. settler).
    */
   drawRangeRings(gs) {
+    const showVision = window.userSettings ? window.userSettings.getShowVision() : true;
+    const showRange  = window.userSettings ? window.userSettings.getShowRange()  : true;
+    if (!showVision && !showRange) return;
+
     const { ctx } = this;
     const ts = gs.tileSize;
 
-    // Outer pass: vision rings (faint dotted)
-    ctx.setLineDash([2, 5]);
-    ctx.lineWidth = 1;
-    for (const t of gs.troops) {
-      const v = t.vision || 0;
-      const r = t.range || 0;
-      if (v <= 0 || v <= r) continue;
-      const cx = (t.col + 0.5) * ts;
-      const cy = (t.row + 0.5) * ts;
-      ctx.strokeStyle = t.owner === "player1"
-        ? "rgba(120,200,255,0.35)"
-        : "rgba(255,140,140,0.35)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, v * ts, 0, Math.PI * 2);
-      ctx.stroke();
+    if (showVision) {
+      // Outer pass: vision rings (faint dotted)
+      ctx.setLineDash([2, 5]);
+      ctx.lineWidth = 1;
+      for (const t of gs.troops) {
+        const v = t.vision || 0;
+        const r = t.range || 0;
+        if (v <= 0 || v <= r) continue;
+        const cx = (t.col + 0.5) * ts;
+        const cy = (t.row + 0.5) * ts;
+        ctx.strokeStyle = t.owner === "player1"
+          ? "rgba(120,200,255,0.35)"
+          : "rgba(255,140,140,0.35)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, v * ts, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
-    // Inner pass: attack range rings (bright dashed)
-    ctx.setLineDash([8, 6]);
-    ctx.lineWidth = 2;
-    for (const t of gs.troops) {
-      if (!t.range || t.range <= 0) continue;
-      const cx = (t.col + 0.5) * ts;
-      const cy = (t.row + 0.5) * ts;
-      ctx.strokeStyle = t.owner === "player1"
-        ? "rgba(120,200,255,0.85)"
-        : "rgba(255,140,140,0.85)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, t.range * ts, 0, Math.PI * 2);
-      ctx.stroke();
+    if (showRange) {
+      // Inner pass: attack range rings (bright dashed)
+      ctx.setLineDash([8, 6]);
+      ctx.lineWidth = 2;
+      for (const t of gs.troops) {
+        if (!t.range || t.range <= 0) continue;
+        const cx = (t.col + 0.5) * ts;
+        const cy = (t.row + 0.5) * ts;
+        ctx.strokeStyle = t.owner === "player1"
+          ? "rgba(120,200,255,0.85)"
+          : "rgba(255,140,140,0.85)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, t.range * ts, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
     ctx.setLineDash([]);

@@ -30,8 +30,16 @@ window.applyKnockback = applyKnockback;
  */
 function applyDamage(target, raw) {
   if (!target || raw <= 0) return;
-  // Teleporting troops are out of phase with the battlefield — nothing reaches
-  // them while they're invisible.
+  // Ninja cloak uses the same invisible flag for targeting but is NOT phase-
+  // shifted — AoE damage reveals her. Break the cloak first so the hit lands
+  // on a now-visible target (and subsequent ticks see a normal unit).
+  if (target.type === "ninja" && target.invisible) {
+    target.invisible    = false;
+    target.cloakActive  = false;
+    target.cloakedUntil = 0;
+  }
+  // Teleporting / Ambush-cloaked troops are out of phase with the battlefield
+  // — nothing reaches them while they're invisible.
   if (target.invisible) return;
 
   // Bunker garrison damage shield: occupants absorb a share of the incoming
@@ -91,6 +99,26 @@ class TroopSystem {
     // before the main loop reads them for regen / speed / attack multipliers.
     this._applyInspirationZones(now);
 
+    // Refresh the cloak on friendlies inside any Invisi-witch's ACTIVE aura.
+    // Runs before the main loop so the cloakedUntil expiry block sees this
+    // frame's refreshed timestamps for troops still in the aura.
+    this._applyInvisiWitchCloak(now, deltaTime);
+
+    // Ogre grab/throw state machine: cooldown tick, grab init, release,
+    // and in-flight position interpolation. Runs before the main loop so
+    // frozenUntil / inFlight flags are set before targeting/movement reads them.
+    this._updateOgreThrows(now, deltaTime);
+
+    // War Machine spawner: every commandoSpawnInterval seconds, emit a
+    // Commando troop at the WM's tile. New units enter on this frame so
+    // they get full normal-loop processing immediately.
+    this._updateWarMachineSpawns(now, deltaTime);
+
+    // War Machine secondary weapon: independent cannon firing alongside the
+    // MG (handled by the standard per-troop attack block via the WM's range
+    // and attackSpeed). The cannon picks the highest-HP target in cannonRange.
+    this._updateWarMachineCannons(now, deltaTime);
+
     for (let i = gs.troops.length - 1; i >= 0; i--) {
       const troop = gs.troops[i];
 
@@ -106,6 +134,9 @@ class TroopSystem {
       // she can move/attack while untargetable — the `cloakActive` flag
       // distinguishes the two.
       if (troop.invisible && !troop.cloakActive) continue;
+      // In-flight troops are being moved + interpolated by _updateOgreThrows;
+      // skip the normal per-troop update so they don't try to walk/attack mid-arc.
+      if (troop.inFlight) continue;
 
       // Bannerman "Inspired" aura — set by _applyInspirationZones earlier this
       // frame. Read once here so regen and the movement/attack blocks below
@@ -196,6 +227,14 @@ class TroopSystem {
       ) {
         troop.target = this._findNearestEnemyTroopGlobal(troop);
       }
+      // Grenadier / Commando: re-pick the best impact anchor every tick —
+      // clusters drift, so a stale aim would waste throws. If nothing's in
+      // throw range we keep the standard target so pursuit logic still walks
+      // us forward. Commando shares the splash-cluster picker logic.
+      if (troop.type === "grenadier" || troop.type === "commando") {
+        const impact = this._findGrenadierImpact(troop);
+        if (impact) troop.target = impact;
+      }
       const target = troop.target;
       troop.lastTarget = target; // renderer reads this for targeting lines
 
@@ -217,17 +256,106 @@ class TroopSystem {
       const effSpeed = troop.speed * slowMove * hasteMove * chillMul * inspireMove * berserkMove;
 
       const dist = this._distanceTo(troop, target);
-      const inAttackRange = target && dist <= troop.range;
+      // Ninja's opener MUST be a katana — until firstAttackPending clears, her
+      // effective range collapses to meleeRange so she pursues into melee
+      // instead of throwing shurikens from afar.
+      let effectiveRange = troop.range;
+      if (troop.type === "ninja" && troop.firstAttackPending) {
+        const ndef = window.troopTypes ? window.troopTypes.ninja : null;
+        effectiveRange = (ndef && ndef.meleeRange) || troop.range;
+      }
+      const inAttackRange = target && dist <= effectiveRange;
 
       if (inAttackRange) {
+        // Ninja dual-attack: katana inside meleeRange (slow + heavy), shuriken
+        // beyond it (fast + weak). Resolved at fire time so the attacker can
+        // snap between modes as the target closes / flees.
+        let ninjaMelee = false;
+        if (troop.type === "ninja") {
+          const ndef = window.troopTypes ? window.troopTypes.ninja : null;
+          const meleeR = (ndef && ndef.meleeRange) || 0;
+          if (dist <= meleeR) ninjaMelee = true;
+        }
         troop.attackTimer = (troop.attackTimer || 0) + deltaTime;
-        const attackInterval = troop.attackSpeed > 0
-          ? 1 / (troop.attackSpeed * slowAtk * hasteAtk * chillMul * inspireAtk * berserkAtk)
+        let baseAtkSpeed = troop.attackSpeed;
+        if (ninjaMelee) {
+          const ndef = window.troopTypes ? window.troopTypes.ninja : null;
+          baseAtkSpeed = (ndef && ndef.meleeAttackSpeed) || troop.attackSpeed;
+        }
+        const attackInterval = baseAtkSpeed > 0
+          ? 1 / (baseAtkSpeed * slowAtk * hasteAtk * chillMul * inspireAtk * berserkAtk)
           : Infinity;
         if (troop.attackTimer >= attackInterval) {
           troop.attackTimer -= attackInterval;
           const wasAlive = target.hp > 0;
-          applyDamage(target, troop.damage);
+          // First swing breaks the spawn cloak (before damage so the hit lands
+          // on a target that already sees the popup of a revealed assassin).
+          if (troop.type === "ninja" && troop.cloakActive) {
+            troop.invisible    = false;
+            troop.cloakActive  = false;
+            troop.cloakedUntil = 0;
+          }
+          if (troop.type === "grenadier" || troop.type === "commando") {
+            // Grenadier / Commando lobs a grenade at the target's center (the
+            // target was chosen by _findGrenadierImpact to maximize enemies
+            // inside the splash radius). Splash IS the damage — no separate
+            // single-target hit on the anchor, since the anchor is itself
+            // inside its own splash radius and would otherwise be hit twice.
+            const gdef = window.troopTypes ? window.troopTypes[troop.type] : null;
+            const splashR = (gdef && gdef.splashRadius) || 1.5;
+            const splash  = (gdef && gdef.splashDamage) || 25;
+            const enemyOwner = troop.owner === "player1" ? "player2" : "player1";
+            const impactCol = target.col + ((target.width || 0) / 2);
+            const impactRow = target.row + ((target.height || 0) / 2);
+            for (const t of gs.troops) {
+              if (t.owner !== enemyOwner) continue;
+              // Ninjas in cloak are NOT phase-shifted — splash hits and reveals them.
+              if (t.hp <= 0 || (t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+              const dx = t.col - impactCol;
+              const dy = t.row - impactRow;
+              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(t, splash);
+            }
+            for (const b of gs.buildings) {
+              if (b.owner !== enemyOwner) continue;
+              if (b.hp <= 0) continue;
+              const bcx = b.col + (b.width || 1) / 2;
+              const bcy = b.row + (b.height || 1) / 2;
+              const dx = bcx - impactCol;
+              const dy = bcy - impactRow;
+              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(b, splash);
+            }
+            if (gs.damagePopups) {
+              gs.damagePopups.push({
+                col: impactCol,
+                row: impactRow,
+                spawnTime: now,
+                label: "BOOM!",
+                color: "#ffb060",
+                dmg: 0,
+              });
+            }
+          } else if (troop.type === "ninja") {
+            const ndef = window.troopTypes ? window.troopTypes.ninja : null;
+            let dmg;
+            if (ninjaMelee) {
+              dmg = (ndef && ndef.meleeDamage) || troop.damage;
+              // First-katana opener gets a +50% bonus; subsequent katanas are normal.
+              if (troop.firstAttackPending) {
+                dmg *= 1.5;
+                troop.firstAttackPending = false;
+              }
+            } else {
+              dmg = troop.damage; // shuriken
+            }
+            // Assassin identity: deadly to squishy support, weak against
+            // durable structures and champions — 80% damage resist on heroes
+            // and ALL buildings. Stacks multiplicatively with target.damageReduction.
+            const isResistant = target.isHero || (gs.buildings && gs.buildings.indexOf(target) !== -1);
+            if (isResistant) dmg *= 0.2;
+            applyDamage(target, dmg);
+          } else {
+            applyDamage(target, troop.damage);
+          }
           if (troop.type === "brute" && wasAlive && target.hp <= 0) {
             const bdef = window.troopTypes ? window.troopTypes.brute : null;
             const heal = (bdef && bdef.berserkerHeal) || 10;
@@ -250,14 +378,16 @@ class TroopSystem {
           // Gust Knight: every swing emits a forward gust — a rectangle of
           // gustLength tiles deep along the attack axis, gustWidth tiles wide
           // perpendicular. Every enemy troop inside gets shoved away from the
-          // Gust Knight. Buildings sit in a separate array and are naturally
-          // unaffected. Mass scaling lives inside applyKnockback. Only the
-          // focused target takes damage; the area is push-only.
+          // Gust Knight and takes splashDamage. Buildings sit in a separate
+          // array and are naturally unaffected. Mass scaling lives inside
+          // applyKnockback. The focused target already took focused damage
+          // above; the splash here stacks on top of that.
           if (troop.type === "gustKnight") {
             const gdef = window.troopTypes ? window.troopTypes.gustKnight : null;
             const dist  = (gdef && gdef.gustKnockback) || 0.6;
             const len   = (gdef && gdef.gustLength)    || 3;
             const halfW = ((gdef && gdef.gustWidth)    || 2) / 2;
+            const splash = (gdef && gdef.splashDamage) || 0;
             let dx = target.col - troop.col;
             let dy = target.row - troop.row;
             const mag = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -266,7 +396,7 @@ class TroopSystem {
             const ox = troop.col + 0.5, oy = troop.row + 0.5;
             for (const t of gs.troops) {
               if (t === troop || t.owner === troop.owner) continue;
-              if (t.hp <= 0 || t.invisible || t.garrisonedIn) continue;
+              if (t.hp <= 0 || (t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
               const rx = t.col - troop.col;
               const ry = t.row - troop.row;
               const along  = rx * dx + ry * dy;
@@ -274,6 +404,7 @@ class TroopSystem {
               if (along < 0 || along > len) continue;
               if (Math.abs(across) > halfW) continue;
               applyKnockback(t, ox, oy, dist);
+              if (splash > 0) applyDamage(t, splash);
             }
             if (gs.damagePopups) {
               gs.damagePopups.push({
@@ -370,6 +501,305 @@ class TroopSystem {
         t.inspireSpeedFactor  = banner.inspireSpeedFactor  || 1.2;
         t.inspireAttackFactor = banner.inspireAttackFactor || 1.2;
         t.inspireRegen        = banner.inspireRegen        || 1.0;
+      }
+    }
+  }
+
+  /**
+   * Invisi-witch cloak aura. Each witch runs her own cycle:
+   * cloakActiveDuration seconds ON, then (cloakCycleDuration - active) OFF.
+   * During the ON phase, every friendly troop within cloakRadius gets the
+   * same `invisible: true, cloakActive: true` pair used by Teleport — visible
+   * as a 35%-alpha silhouette but skipped by targeting. Other invisi-witches
+   * are excluded from the buff loop (no chaining); the source witch IS
+   * included, so she cloaks herself.
+   *
+   * Implementation: a one-frame TTL refreshed every tick. When the witch flips
+   * to OFF, or a friendly leaves the radius, the refresh stops and the shared
+   * cloakedUntil expiry block at the top of update() clears the flags one
+   * frame later — yielding crisp phase boundaries without per-source tracking.
+   */
+  _applyInvisiWitchCloak(now, deltaTime) {
+    const gs = this.gameState;
+    const TTL = 0.05;
+    for (const witch of gs.troops) {
+      if (witch.type !== "invisiWitch") continue;
+      if (witch.hp <= 0 || witch.active === false) continue;
+      witch.invisPhaseTimer = (witch.invisPhaseTimer || 0) + deltaTime;
+      const cycle = witch.cloakCycleDuration || 4.5;
+      if (witch.invisPhaseTimer >= cycle) witch.invisPhaseTimer -= cycle;
+      const activeDur = witch.cloakActiveDuration || 2.0;
+      witch.invisActive = witch.invisPhaseTimer < activeDur;
+      if (!witch.invisActive) continue;
+      const r = witch.cloakRadius || 2.0;
+      for (const t of gs.troops) {
+        if (t.owner !== witch.owner) continue;
+        if (t.hp <= 0) continue;
+        if (t.type === "invisiWitch" && t !== witch) continue;
+        const dx = t.col - witch.col;
+        const dy = t.row - witch.row;
+        if (Math.sqrt(dx * dx + dy * dy) > r) continue;
+        t.invisible    = true;
+        t.cloakActive  = true;
+        t.cloakedUntil = now + TTL;
+      }
+    }
+  }
+
+  /**
+   * Ogre grab-and-throw. Three concerns, all in one method so the whole
+   * ability lives in one place:
+   *   A) Tick each Ogre's throwTimer. When ready AND an enemy is in throwRange,
+   *      start a grab: freeze both Ogre and target for grabDuration.
+   *   B) When grabDuration expires, release the throw — pick the FARTHEST
+   *      other enemy in throwRange as the impact destination (or straight
+   *      backwards if none exists). Stamp flight state on the thrown troop.
+   *   C) Advance every in-flight troop's position along its lerp + arc; on
+   *      arrival, apply impact damage, stun, splash, and a popup.
+   *
+   * Heroes are valid grab targets (per user decision). Invisible/garrisoned/
+   * in-flight troops are NOT eligible (can't reach them).
+   */
+  _updateOgreThrows(now, deltaTime) {
+    const gs = this.gameState;
+    if (!gs || !gs.troops) return;
+
+    // (C) Advance in-flight troops first so an Ogre that lands an enemy this
+    // frame can immediately start a new grab next frame.
+    for (const t of gs.troops) {
+      if (!t.inFlight) continue;
+      const span = (t.thrownEndT - t.thrownStartT) || 0.4;
+      const u = Math.min(1, Math.max(0, (now - t.thrownStartT) / span));
+      t.col = t.thrownStart.col + (t.thrownEnd.col - t.thrownStart.col) * u;
+      t.row = t.thrownStart.row + (t.thrownEnd.row - t.thrownStart.row) * u;
+      t.thrownArcLift = (t.thrownArcMax || 0) * 4 * u * (1 - u);
+
+      if (u >= 1) {
+        t.col = t.thrownEnd.col;
+        t.row = t.thrownEnd.row;
+        t.inFlight = false;
+        t.thrownArcLift = 0;
+        // Clear the "invisible-while-flying" flags BEFORE applyDamage so the
+        // landing damage actually lands (applyDamage early-returns on invisible
+        // for non-ninja targets, and the ninja path would otherwise break cloak).
+        t.invisible = false;
+        t.cloakActive = false;
+        const thrownBy = t.thrownBy;
+        const odef = window.troopTypes ? window.troopTypes.ogre : null;
+        const impactDmg = (odef && odef.impactDamage) || 30;
+        const splashR   = (odef && odef.splashRadius) || 1.0;
+        const splashDmg = (odef && odef.splashDamage) || 20;
+
+        applyDamage(t, impactDmg);
+        t.stunUntil = Math.max(t.stunUntil || 0, now + 0.25);
+
+        if (thrownBy) {
+          const enemyOwner = thrownBy.owner === "player1" ? "player2" : "player1";
+          for (const v of gs.troops) {
+            if (v === t) continue;
+            if (v.owner !== enemyOwner) continue;
+            if (v.hp <= 0) continue;
+            if ((v.invisible && v.type !== "ninja") || v.garrisonedIn || v.inFlight) continue;
+            const dx = v.col - t.col;
+            const dy = v.row - t.row;
+            if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(v, splashDmg);
+          }
+        }
+
+        if (gs.damagePopups) {
+          gs.damagePopups.push({
+            col: t.col, row: t.row, spawnTime: now,
+            label: "THROWN!", color: "#ff8060", dmg: 0,
+          });
+        }
+        t.thrownBy      = null;
+        t.thrownStart   = null;
+        t.thrownEnd     = null;
+      }
+    }
+
+    // (A + B) Per-Ogre cooldown tick and grab/release.
+    for (const ogre of gs.troops) {
+      if (ogre.type !== "ogre") continue;
+      if (ogre.hp <= 0 || ogre.active === false) continue;
+
+      const odef = window.troopTypes ? window.troopTypes.ogre : null;
+      const throwCD     = (odef && odef.throwCooldown)   || 3.5;
+      const throwRange  = (odef && odef.throwRange)      || 5.0;
+      const throwBlind  = (odef && odef.throwBlindSpot)  || 0;
+      const grabDur     = (odef && odef.grabDuration)    || 0.25;
+      const flightDur   = (odef && odef.flightDuration)  || 0.4;
+      const flightArc   = (odef && odef.flightArcHeight) || 2.5;
+
+      // (B) Release a pending grab when the grab timer lapses.
+      if (ogre.grabTarget && ogre.grabUntil <= now) {
+        const tgt = ogre.grabTarget;
+        ogre.grabTarget = null;
+
+        // Grab target may have died during grab phase — graceful no-op.
+        if (tgt.hp > 0) {
+          // Find farthest OTHER enemy in throwRange from the Ogre.
+          const enemyOwner = ogre.owner === "player1" ? "player2" : "player1";
+          let farthest = null;
+          let bestD = -1;
+          for (const v of gs.troops) {
+            if (v === tgt) continue;
+            if (v.owner !== enemyOwner) continue;
+            if (v.hp <= 0) continue;
+            if ((v.invisible && v.type !== "ninja") || v.garrisonedIn || v.inFlight) continue;
+            const dx = v.col - ogre.col;
+            const dy = v.row - ogre.row;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d > throwRange) continue;
+            if (d < throwBlind) continue; // too close — point-blank yeet would land on top of the Ogre
+            if (d > bestD) { bestD = d; farthest = v; }
+          }
+
+          let impactCol, impactRow;
+          if (farthest) {
+            impactCol = farthest.col;
+            impactRow = farthest.row;
+          } else {
+            // No eligible target (none in range, or all inside the blind spot)
+            // — yeet FORWARD into the enemy's backline so we're always
+            // advancing pressure, never handing the grabbed unit back home.
+            const forwardDir = ogre.owner === "player1" ? +1 : -1;
+            impactCol = ogre.col + forwardDir * throwRange;
+            impactRow = ogre.row;
+          }
+          impactCol = Math.max(0.5, Math.min(gs.cols - 0.5, impactCol));
+          impactRow = Math.max(0.5, Math.min(gs.rows - 0.5, impactRow));
+
+          tgt.inFlight      = true;
+          // Piggyback on the existing invisible+cloakActive triplet so all
+          // existing targeting/AoE/building/collision filters that already
+          // skip `t.invisible` naturally skip in-flight troops too. Renderer
+          // overrides alpha back to 1.0 when t.inFlight is set (see below).
+          tgt.invisible     = true;
+          tgt.cloakActive   = true;
+          tgt.frozenUntil   = Math.max(tgt.frozenUntil || 0, now + flightDur);
+          tgt.thrownStart   = { col: tgt.col, row: tgt.row };
+          tgt.thrownEnd     = { col: impactCol, row: impactRow };
+          tgt.thrownStartT  = now;
+          tgt.thrownEndT    = now + flightDur;
+          tgt.thrownArcLift = 0;
+          tgt.thrownArcMax  = flightArc;
+          tgt.thrownBy      = ogre;
+        }
+        ogre.throwTimer = 0;
+      }
+
+      // (A) Tick cooldown and look for a new grab. Timer starts AT throwCD
+      // so the Ogre's first throw fires as soon as she finds a target.
+      if (ogre.throwTimer === undefined) ogre.throwTimer = throwCD;
+      else ogre.throwTimer = Math.min(throwCD, ogre.throwTimer + deltaTime);
+      if (ogre.grabUntil && ogre.grabUntil > now) continue; // still grabbing
+      if (ogre.throwTimer < throwCD) continue;
+
+      // Pick closest eligible enemy within MELEE range (grab requires contact,
+      // not throw range — keeps the Ogre from siphoning targets across the map).
+      const grabRing = ogre.range;
+      const enemyOwner = ogre.owner === "player1" ? "player2" : "player1";
+      let nearest = null;
+      let bestD = Infinity;
+      for (const v of gs.troops) {
+        if (v.owner !== enemyOwner) continue;
+        if (v.hp <= 0) continue;
+        if ((v.invisible && v.type !== "ninja") || v.garrisonedIn || v.inFlight) continue;
+        const dx = v.col - ogre.col;
+        const dy = v.row - ogre.row;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > grabRing) continue;
+        if (d < bestD) { bestD = d; nearest = v; }
+      }
+      if (!nearest) continue;
+
+      ogre.grabTarget    = nearest;
+      ogre.grabUntil     = now + grabDur;
+      ogre.frozenUntil   = Math.max(ogre.frozenUntil || 0, now + grabDur);
+      nearest.frozenUntil = Math.max(nearest.frozenUntil || 0, now + grabDur);
+    }
+  }
+
+  /**
+   * War Machine commando spawner. Each WM has a per-instance accumulator
+   * (commandoSpawnTimer). Every commandoSpawnInterval seconds, emit one
+   * Commando at the WM's tile (immediately active — no 1.2s activation
+   * since this is a friendly emit, not an enemy frontline drop). Mirrors
+   * the warBonesFactory's spawnInterval pattern at the building level.
+   */
+  _updateWarMachineSpawns(now, deltaTime) {
+    const gs = this.gameState;
+    if (!gs || !gs.troops) return;
+    const def = window.troopTypes ? window.troopTypes.warMachine : null;
+    const interval = (def && def.commandoSpawnInterval) || 7;
+
+    // Iterate a snapshot length so newly-pushed commandos don't loop back in
+    // this same tick (they're War Machines that we'd skip anyway via the type
+    // check, but iterating a snapshot keeps the contract explicit).
+    const snapshotLen = gs.troops.length;
+    for (let i = 0; i < snapshotLen; i++) {
+      const wm = gs.troops[i];
+      if (!wm) continue;
+      if (wm.type !== "warMachine") continue;
+      if (wm.hp <= 0 || wm.active === false) continue;
+
+      wm.commandoSpawnTimer = (wm.commandoSpawnTimer || 0) + deltaTime;
+      if (wm.commandoSpawnTimer < interval) continue;
+      wm.commandoSpawnTimer -= interval;
+
+      const c = this.gameLogic.createTroop("commando", wm.row, wm.col, wm.owner);
+      if (!c) continue;
+      c.active = true;
+      c.activationTime = 0;
+      c.activationDuration = 0;
+      gs.troops.push(c);
+
+      if (gs.damagePopups) {
+        gs.damagePopups.push({
+          col: wm.col, row: wm.row, spawnTime: now,
+          label: "COMMANDO!", color: "#a0d060", dmg: 0,
+        });
+      }
+    }
+  }
+
+  /**
+   * War Machine secondary weapon: an independent Cannon firing on its own
+   * cooldown alongside the primary MG (which is handled by the standard
+   * per-troop attack block via the WM's range/damage/attackSpeed). Targets
+   * the highest-HP enemy entity (troop or building) in cannonRange. Heavy
+   * single-shot hit, slow cadence. Both weapons share stun/freeze gating.
+   */
+  _updateWarMachineCannons(now, deltaTime) {
+    const gs = this.gameState;
+    if (!gs || !gs.troops) return;
+    const def = window.troopTypes ? window.troopTypes.warMachine : null;
+    const cd  = (def && def.cannonAttackCooldown) || 2.5;
+    const rng = (def && def.cannonRange)          || 5.0;
+    const dmg = (def && def.cannonDamage)         || 50;
+
+    for (const wm of gs.troops) {
+      if (wm.type !== "warMachine") continue;
+      if (wm.hp <= 0 || wm.active === false) continue;
+      if (wm.stunUntil && wm.stunUntil > now) continue;
+      if (wm.frozenUntil && wm.frozenUntil > now) continue;
+
+      // Cap accumulator at cd so an idle WM doesn't burst-fire when a target
+      // finally enters range.
+      wm.cannonTimer = Math.min(cd, (wm.cannonTimer || 0) + deltaTime);
+      if (wm.cannonTimer < cd) continue;
+
+      const target = this._highestHpEnemyInRange(wm, rng);
+      if (!target) continue; // hold the timer at cd until something appears
+      wm.cannonTimer = 0;
+      applyDamage(target, dmg);
+
+      if (gs.damagePopups) {
+        gs.damagePopups.push({
+          col: wm.col, row: wm.row, spawnTime: now,
+          label: "BOOM!", color: "#ffb060", dmg: 0,
+        });
       }
     }
   }
@@ -600,6 +1030,117 @@ class TroopSystem {
 
     // The enemy hero is a normal troop already considered by the loop above;
     // no separate fallback is needed now that towers are gone.
+    return best;
+  }
+
+  /**
+   * Pick the enemy entity (troop or building) with the highest current HP
+   * within `range`. Used by the War Machine's cannon weapon system (see
+   * `_updateWarMachineCannons`). Mirrors the building Cannon's picker at
+   * `buildingSystem.js:_highestHpEnemyInRange` — closer wins on tie, honors
+   * the same invisibility/garrison/in-flight filters that `_findTarget` does.
+   */
+  _highestHpEnemyInRange(troop, range) {
+    const gs = this.gameState;
+    const enemy = troop.owner === "player1" ? "player2" : "player1";
+    let best = null;
+    let bestHp = -Infinity;
+    let bestDist = Infinity;
+
+    for (const t of gs.troops) {
+      if (t.owner !== enemy) continue;
+      if (t.invisible || t.garrisonedIn || t.inFlight) continue;
+      const dx = t.col - troop.col;
+      const dy = t.row - troop.row;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > range) continue;
+      if (t.hp > bestHp || (t.hp === bestHp && d < bestDist)) {
+        best = t; bestHp = t.hp; bestDist = d;
+      }
+    }
+    for (const b of gs.buildings) {
+      if (b.owner !== enemy) continue;
+      if (b.hp <= 0) continue;
+      const bcx = b.col + (b.width || 1) / 2;
+      const bcy = b.row + (b.height || 1) / 2;
+      const dx = bcx - troop.col;
+      const dy = bcy - troop.row;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > range) continue;
+      if (b.hp > bestHp || (b.hp === bestHp && d < bestDist)) {
+        best = b; bestHp = b.hp; bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Grenadier-specific target picker. Instead of "nearest enemy," scan every
+   * enemy entity (troop or building) within throw range and pick the one whose
+   * splash radius would catch the most enemies. The returned entity is used
+   * purely as the impact anchor — the splash loop in the attack tick damages
+   * everything in radius, not just the anchor. Ties break to the closer anchor
+   * so the Grenadier prefers nearer of equal-value clusters. Returns null when
+   * no enemy is in throw range, in which case the caller falls back to the
+   * standard target (pursuit logic walks the Grenadier forward).
+   */
+  _findGrenadierImpact(troop) {
+    const gs = this.gameState;
+    const enemy = troop.owner === "player1" ? "player2" : "player1";
+    const range = troop.range;
+    // Read splash radius from the actual troop type so commandos read commando
+    // stats, grenadiers read grenadier stats, etc.
+    const gdef = window.troopTypes ? window.troopTypes[troop.type] : null;
+    const splashR = (gdef && gdef.splashRadius) || 1.5;
+
+    const candidates = [];
+    for (const t of gs.troops) {
+      if (t.owner !== enemy) continue;
+      if (t.hp <= 0 || t.invisible || t.garrisonedIn) continue;
+      const dx = t.col - troop.col;
+      const dy = t.row - troop.row;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= range) candidates.push({ entity: t, cx: t.col, cy: t.row, dist: d });
+    }
+    for (const b of gs.buildings) {
+      if (b.owner !== enemy) continue;
+      if (b.hp <= 0) continue;
+      const bcx = b.col + (b.width || 1) / 2;
+      const bcy = b.row + (b.height || 1) / 2;
+      const dx = bcx - troop.col;
+      const dy = bcy - troop.row;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= range) candidates.push({ entity: b, cx: bcx, cy: bcy, dist: d });
+    }
+    if (candidates.length === 0) return null;
+
+    let best = null;
+    let bestCount = -1;
+    let bestDist = Infinity;
+    for (const c of candidates) {
+      let count = 0;
+      for (const t of gs.troops) {
+        if (t.owner !== enemy) continue;
+        if (t.hp <= 0 || t.invisible || t.garrisonedIn) continue;
+        const dx = t.col - c.cx;
+        const dy = t.row - c.cy;
+        if (Math.sqrt(dx * dx + dy * dy) <= splashR) count++;
+      }
+      for (const b of gs.buildings) {
+        if (b.owner !== enemy) continue;
+        if (b.hp <= 0) continue;
+        const bcx = b.col + (b.width || 1) / 2;
+        const bcy = b.row + (b.height || 1) / 2;
+        const dx = bcx - c.cx;
+        const dy = bcy - c.cy;
+        if (Math.sqrt(dx * dx + dy * dy) <= splashR) count++;
+      }
+      if (count > bestCount || (count === bestCount && c.dist < bestDist)) {
+        best = c.entity;
+        bestCount = count;
+        bestDist = c.dist;
+      }
+    }
     return best;
   }
 
