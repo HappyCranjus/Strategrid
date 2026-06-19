@@ -111,6 +111,18 @@ const buildingTypes = {
     hpRegen: 0.2,
     damageReduction: 0.3,
   },
+  reaperTurret: {
+    cost: 8,
+    hp: 150,
+    activationTime: 3,
+    width: 1,
+    height: 1,
+    color: "#3a0010",
+    damage: 6,
+    range: 7,
+    attackCooldown: 0.333,
+    damagePerReaper: 30,
+  },
 };
 
 /**
@@ -196,8 +208,6 @@ const strategemTypes = {
     duration: 4,
     radius: 4,
     pullSpeed: 1.5,
-    maxDps: 6,
-    damageTickRate: 3,
     color: "#3050a0",
   },
   lesserTeleport: {
@@ -526,6 +536,19 @@ const troopTypes = {
     mass: 0.8,
     radius: 0.2,
   },
+  reaper: {
+    cost: 0,
+    hp: 40,
+    damage: 18,
+    attackSpeed: 1.5,
+    range: 0.8,
+    vision: 99,
+    speed: 4.5,
+    mass: 0.8,
+    radius: 0.25,
+    targetHeroOnly: true,
+    color: "#800040",
+  },
   zombie: {
     cost: 0,
     hp: 250,
@@ -663,7 +686,8 @@ class GameLogic {
       type === "cannon" ||
       type === "chillTurret" ||
       type === "lavaMortar" ||
-      type === "towerTurret"
+      type === "towerTurret" ||
+      type === "reaperTurret"
     ) {
       building.attackTimer = 0;
     }
@@ -719,9 +743,6 @@ class GameLogic {
       s.strikesFired = 0;
       s.lastHits = [];
       s.lastHitsAge = 0;
-    }
-    if (type === "gravityField") {
-      s.damageTickTimer = 0;
     }
     if (type === "lesserTeleport" || type === "greaterTeleport") {
       s.startCol = params.col;

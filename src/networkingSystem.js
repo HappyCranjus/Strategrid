@@ -263,14 +263,21 @@ class NetworkingSystem {
    * @param {Object} message - Message object
    */
   sendMessage(message) {
-    if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+    if (!this.dataChannel || !this.dataChannel.open) {
       // Queue message if connection not ready
       this.messageQueue.push(message);
       return;
     }
 
     try {
-      const data = JSON.stringify(message);
+      const seen = new WeakSet();
+      const data = JSON.stringify(message, (key, value) => {
+        if (typeof value === "object" && value !== null) {
+          if (seen.has(value)) return undefined;
+          seen.add(value);
+        }
+        return value;
+      });
       this.dataChannel.send(data);
     } catch (error) {
       console.error("[Networking] Error sending message:", error);
@@ -316,7 +323,7 @@ class NetworkingSystem {
       deck: clientDeck,
     };
 
-    if (this.dataChannel && this.dataChannel.readyState === "open") {
+    if (this.dataChannel && this.dataChannel.open) {
       console.log("[Networking] Sending client deck to host:", clientDeck);
       this.sendMessage(message);
     } else {
@@ -347,9 +354,9 @@ class NetworkingSystem {
       }, 100); // Small initial delay to ensure data channel is ready
     }
 
-    // Start state sync if host
+    // Start state sync if host — called from doStart() in game.js AFTER
+    // gameState.initialize() so the first sync never carries an empty grid.
     if (this.isHost) {
-      this.startStateSync();
       // Request deck from client if not received within 2 seconds
       setTimeout(() => {
         if (window.deckSystem) {
@@ -388,7 +395,7 @@ class NetworkingSystem {
 
     // Sync state every 100ms
     this.stateSyncInterval = setInterval(() => {
-      if (this.gameState && this.dataChannel && this.dataChannel.readyState === "open") {
+      if (this.gameState && this.dataChannel && this.dataChannel.open) {
         const state = this.gameState.getNetworkState();
         this.sendMessage({
           type: "gameState",

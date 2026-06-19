@@ -476,14 +476,7 @@ class StrategemSystem {
     const gs = this.gameState;
     const radius = def.radius || 4;
     const pullSpeed = def.pullSpeed != null ? def.pullSpeed : 1.5;
-    const maxDps = def.maxDps != null ? def.maxDps : 6;
-    const tickRate = def.damageTickRate || 3;
-    const tickInterval = 1 / tickRate;
     const enemyOwner = s.owner === "player1" ? "player2" : "player1";
-
-    s.damageTickTimer = (s.damageTickTimer || 0) + dt;
-    const fireTick = s.damageTickTimer >= tickInterval;
-    if (fireTick) s.damageTickTimer -= tickInterval;
 
     for (const t of gs.troops) {
       if (t.owner !== enemyOwner) continue;
@@ -500,11 +493,6 @@ class StrategemSystem {
           t.col -= (dx / d) * step;
           t.row -= (dy / d) * step;
         }
-      }
-
-      if (fireTick) {
-        const tickDmg = maxDps * (1 - d / radius) / tickRate;
-        if (tickDmg > 0) window.applyDamage(t, tickDmg);
       }
     }
   }

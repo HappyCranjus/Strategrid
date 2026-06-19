@@ -149,6 +149,7 @@ class Renderer {
       this.drawGrid(gs);
       this.drawBuildings(gs);
       this.drawStrategems(gs);
+      this.drawTeleportTimers(gs);
       this.drawRangeRings(gs);
       this.drawTroops(gs);
       this.drawDamagePopups(gs);
@@ -381,7 +382,7 @@ class Renderer {
         // Fallback: colored circle (sprite not loaded / failed)
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = this.troopColors[t.owner] || "#aaa";
+        ctx.fillStyle = (def && def.color) || this.troopColors[t.owner] || "#aaa";
         if (inactive) ctx.globalAlpha = 0.45;
         ctx.fill();
         if (inactive) ctx.globalAlpha = 1.0;
@@ -1029,6 +1030,31 @@ class Renderer {
     }
   }
 
+  drawTeleportTimers(gs) {
+    if (!gs.strategems || gs.strategems.length === 0) return;
+    const { ctx } = this;
+    const ts = gs.tileSize;
+
+    ctx.save();
+    ctx.font = "bold " + Math.round(ts * 0.36) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const s of gs.strategems) {
+      if (s.type !== "lesserTeleport" && s.type !== "greaterTeleport") continue;
+      if (s.phase === "done") continue;
+      const remaining = Math.max(0, s.duration - s.age);
+      const label = remaining.toFixed(1);
+      const x = (s.endCol + 0.5) * ts;
+      const y = (s.endRow + 0.5) * ts;
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, x, y);
+      ctx.fillStyle = s.type === "lesserTeleport" ? "#a060ff" : "#c060ff";
+      ctx.fillText(label, x, y);
+    }
+    ctx.restore();
+  }
+
   /**
    * Two dashed rings per troop:
    *   • inner  — attack range (bright, big dashes)
@@ -1075,6 +1101,23 @@ class Renderer {
           : "rgba(255,140,140,0.85)";
         ctx.beginPath();
         ctx.arc(cx, cy, t.range * ts, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Building range rings (cannon, chillTurret, lavaMortar, towerTurret, reaperTurret, etc.)
+      const bDefs = window.buildingTypes || {};
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.5;
+      for (const b of gs.buildings) {
+        const bdef = bDefs[b.type];
+        if (!bdef || !bdef.range) continue;
+        const bcx = (b.col + (b.width  || 1) / 2) * ts;
+        const bcy = (b.row + (b.height || 1) / 2) * ts;
+        ctx.strokeStyle = b.owner === "player1"
+          ? "rgba(120,200,255,0.55)"
+          : "rgba(255,140,140,0.55)";
+        ctx.beginPath();
+        ctx.arc(bcx, bcy, bdef.range * ts, 0, Math.PI * 2);
         ctx.stroke();
       }
     }

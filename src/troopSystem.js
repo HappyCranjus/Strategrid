@@ -1000,6 +1000,13 @@ class TroopSystem {
    */
   _findTarget(troop) {
     const gs = this.gameState;
+
+    if (troop.targetHeroOnly) {
+      const hero = troop.owner === "player1" ? gs.hero2 : gs.hero1;
+      if (hero && !hero.invisible && hero.hp > 0) return hero;
+      return null;
+    }
+
     const enemy = troop.owner === "player1" ? "player2" : "player1";
     const sight = troop.vision != null ? troop.vision : troop.range;
     if (sight <= 0) return null;

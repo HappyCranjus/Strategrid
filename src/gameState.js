@@ -163,6 +163,11 @@ class GameState {
    * @param {string} winner - "player1" or "player2"
    */
   setGameOver(winner) {
+    // In PvP the host is the sole authority on game-over; ignore calls that
+    // originate from the client's own divergent local simulation.
+    if (this.gameMode === "pvp" && window.networkingSystem && !window.networkingSystem.isHost) {
+      return;
+    }
     this.gameOver = true;
     this.winner = winner;
     const overlay = document.getElementById("gameOverOverlay");
@@ -240,9 +245,25 @@ class GameState {
    */
   getNetworkState() {
     return {
-      troops: this.troops,
-      buildings: this.buildings,
-      strategems: this.strategems,
+      troops: this.troops.map(t => ({
+        ...t,
+        target: null,
+        lastTarget: null,
+        attackFlashTarget: null,
+        thrownBy: null,
+        garrisonedIn: null,
+      })),
+      buildings: this.buildings.map(b => ({
+        ...b,
+        target: null,
+        lastTarget: null,
+        attackFlashTarget: null,
+        occupants: b.occupants ? [] : b.occupants,
+      })),
+      strategems: this.strategems.map(s => ({
+        ...s,
+        cargo: s.cargo ? [] : s.cargo,
+      })),
       strategemCooldowns: this.strategemCooldowns,
       heroAbilityCooldowns: this.heroAbilityCooldowns,
       currentRP: this.currentRP,
@@ -252,6 +273,8 @@ class GameState {
       phase: this.phase,
       matchTime: this.matchTime,
       grid: this.grid,
+      gameOver: this.gameOver,
+      winner: this.winner,
     };
   }
 
@@ -282,7 +305,7 @@ class GameState {
     if (state.maxTP) this.maxTP = state.maxTP;
     if (state.phase) this.phase = state.phase;
     if (typeof state.matchTime === "number") this.matchTime = state.matchTime;
-    if (state.grid) this.grid = state.grid;
+    if (state.grid && state.grid.length > 0) this.grid = state.grid;
 
     // Re-resolve hero refs through the freshly-installed troops array.
     this.hero1 = this.troops.find((t) => t.isHero && t.owner === "player1") || null;
@@ -293,6 +316,22 @@ class GameState {
     if (localId && localHeroPos) {
       const myHero = localId === "player1" ? this.hero1 : this.hero2;
       if (myHero) { myHero.col = localHeroPos.col; myHero.row = localHeroPos.row; }
+    }
+
+    // Propagate host's game-over to client. The setGameOver() guard blocks the
+    // client from calling it locally, so we apply it directly here instead.
+    if (state.gameOver === true && !this.gameOver) {
+      this.gameOver = true;
+      this.winner = state.winner || null;
+      const overlay = document.getElementById("gameOverOverlay");
+      if (overlay) {
+        const msg = document.getElementById("gameOverMessage");
+        if (msg) {
+          const local = window.networkingSystem && window.networkingSystem.getLocalPlayerId();
+          msg.textContent = state.winner === local ? "You Win!" : "Opponent Wins!";
+        }
+        overlay.style.display = "flex";
+      }
     }
   }
 

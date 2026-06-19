@@ -31,6 +31,7 @@ class DeckSystem {
       "warBonesFactory",
       "chillTurret",
       "lavaMortar",
+      "reaperTurret",
     ];
 
     this.availableStrategems = [

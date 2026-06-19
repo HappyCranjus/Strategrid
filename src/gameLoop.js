@@ -64,29 +64,34 @@ class GameLoop {
         aiController,
       } = window.gameSetupResult;
       const gameOver = gameState && gameState.gameOver;
+      // PvP client receives authoritative state from host; running the local
+      // simulation would cause divergence (false game-over, timer drift, etc.).
+      const isNetworkClient = gameState && gameState.gameMode === "pvp" &&
+        window.networkingSystem && !window.networkingSystem.isHost;
 
-      if (!gameOver) {
-        // phaseSystem must always tick — it owns the intermission countdown.
-        // Intermissions freeze the rest of the simulation so the deck-pick
-        // modal is uncontested (renderer still runs below for board visibility).
-        if (phaseSystem) phaseSystem.update(deltaTime);
+      try {
+        if (!gameOver) {
+          if (!isNetworkClient) {
+            // Full simulation: host, sandbox, pvc
+            if (phaseSystem) phaseSystem.update(deltaTime);
 
-        const inIntermission = gameState &&
-          (gameState.phase === "intermission1" || gameState.phase === "intermission2");
+            const inIntermission = gameState &&
+              (gameState.phase === "intermission1" || gameState.phase === "intermission2");
 
-        if (!inIntermission) {
-          // Order matters: influence first (resource reads tile owners), then
-          // resource, then AI (so it spends current-frame RP/TP), then hero
-          // input (so hero positions are current before troop combat), then
-          // movement/combat.
-          if (influenceSystem) influenceSystem.update(deltaTime);
-          if (resourceSystem) resourceSystem.update(deltaTime);
-          if (aiController) aiController.update(deltaTime);
+            if (!inIntermission) {
+              if (influenceSystem) influenceSystem.update(deltaTime);
+              if (resourceSystem) resourceSystem.update(deltaTime);
+              if (aiController) aiController.update(deltaTime);
+              if (troopSystem) troopSystem.update(deltaTime);
+              if (buildingSystem) buildingSystem.update(deltaTime);
+              if (strategemSystem) strategemSystem.update(deltaTime);
+            }
+          }
+          // Hero input runs on both host and client (PvP client sends heroPosition to host)
           if (heroInput) heroInput.update(deltaTime);
-          if (troopSystem) troopSystem.update(deltaTime);
-          if (buildingSystem) buildingSystem.update(deltaTime);
-          if (strategemSystem) strategemSystem.update(deltaTime);
         }
+      } catch (e) {
+        console.error("[GameLoop] System update error:", e);
       }
       if (renderer) renderer.render();
     }

@@ -74,17 +74,32 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
       if (t.roomCodeInterval) { clearInterval(t.roomCodeInterval); t.roomCodeInterval = null; }
     }
 
-    setTimeout(() => {
+    const doStart = () => {
       overlay.style.display = "none";
       gameState.paused = false;
       gameState.initialize();
       window.gameSetupResult.buildingSystem.placeInitialTurrets();
+      if (networkingSystem.isHost) networkingSystem.startStateSync();
       installPhaseTimerHUD();
       gameLoop.start();
-
-      // Once decks are settled (deck sync arrives shortly after connect), populate deck buttons.
       setTimeout(() => buildHotkeyRails(networkingSystem), 200);
-    }, 800);
+    };
+
+    if (networkingSystem.isHost) {
+      // Wait until client's deck is received so _spawnHeroes picks the right hero.
+      // Falls through after 3s in case the deck message is lost.
+      const deadline = Date.now() + 3000;
+      const poll = () => {
+        if (window.deckSystem.player2DeckSetFromNetwork || Date.now() >= deadline) {
+          doStart();
+        } else {
+          setTimeout(poll, 100);
+        }
+      };
+      setTimeout(poll, 300);
+    } else {
+      setTimeout(doStart, 800);
+    }
   };
 
   window.onMultiplayerDisconnected = () => {

@@ -99,7 +99,6 @@ class UIState {
   _trySpawnTroop(row, col, owner, troopType) {
     if (this._isRemoteClient()) {
       this._sendAction({ kind: "spawnTroop", row, col, troopType });
-      return;
     }
     const gs = this.gameState;
     const elig = this.getSpawnEligibility(col, row, owner, troopType);
@@ -195,8 +194,6 @@ class UIState {
   _tryPlaceBuilding(row, col, owner, buildingType) {
     if (this._isRemoteClient()) {
       this._sendAction({ kind: "placeBuilding", row, col, buildingType });
-      this.buildMode = null;
-      return;
     }
     const gs = this.gameState;
     // Enforce placement zones: player1 on left half, player2 on right half.
@@ -283,8 +280,6 @@ class UIState {
 
     if (this._isRemoteClient()) {
       this._sendAction({ kind: "placeStrategem", strategemType, params });
-      this.strategemMode = null;
-      return;
     }
 
     this._commitStrategem(owner, strategemType, params);

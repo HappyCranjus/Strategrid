@@ -81,6 +81,9 @@ class BuildingSystem {
         case "towerTurret":
           this._updateRangedTower(b, def, deltaTime);
           break;
+        case "reaperTurret":
+          this._updateReaperTurret(b, def, deltaTime);
+          break;
       }
     }
   }
@@ -389,6 +392,48 @@ class BuildingSystem {
     const row = Math.max(0.5, Math.min(rows - 0.5, pos.row));
     const skel = this.gameLogic.createTroop("skeleton", row, col, building.owner);
     if (skel) gs.troops.push(skel);
+  }
+
+  /** Reaper Turret: fires heavy slugs at the enemy hero only; spawns a Reaper every 100 raw damage dealt. */
+  _updateReaperTurret(b, def, dt) {
+    const gs = this.gameState;
+    const hero = b.owner === "player1" ? gs.hero2 : gs.hero1;
+    if (!hero || hero.hp <= 0 || hero.invisible) return;
+
+    const cx = b.col + (b.width || 1) / 2;
+    const cy = b.row + (b.height || 1) / 2;
+    const dx = hero.col - cx, dy = hero.row - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > (def.range || 7)) return;
+
+    b.lastTarget = hero;
+    b.attackTimer = (b.attackTimer || 0) + dt;
+    if (b.attackTimer < def.attackCooldown) return;
+
+    b.attackTimer = 0;
+    window.applyDamage(hero, def.damage);
+    b.attackFlashTarget = hero;
+    b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+
+    b.damageAccumulator = (b.damageAccumulator || 0) + def.damage;
+    const threshold = def.damagePerReaper || 100;
+    while (b.damageAccumulator >= threshold) {
+      b.damageAccumulator -= threshold;
+      this._spawnReaperAt(b);
+    }
+  }
+
+  _spawnReaperAt(b) {
+    const gs = this.gameState;
+    if (!gs) return;
+    const row = b.row + (b.height || 1) / 2;
+    const col = b.col + (b.width || 1) / 2;
+    const reaper = this.gameLogic.createTroop("reaper", row, col, b.owner);
+    if (reaper) {
+      reaper.active = true;
+      reaper.activationTime = 0;
+      gs.troops.push(reaper);
+    }
   }
 }
 
