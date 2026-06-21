@@ -13,7 +13,6 @@ class DeckSystem {
       "settler",
       "brute",
       "sentinel",
-      "bannerman",
       "gustKnight",
       "grenadier",
       "invisiWitch",
@@ -45,7 +44,6 @@ class DeckSystem {
       "lesserTeleport",
       "greaterTeleport",
       "chronoHaste",
-      "chronoSlow",
       "chronoStop",
     ];
 

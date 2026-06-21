@@ -114,6 +114,38 @@ class SignalingClient {
   }
 
   /**
+   * Create a PeerJS peer with a PeerJS-assigned random ID. Used by the
+   * matchmaking flow where the server (not the client) determines the room code.
+   * @returns {Promise<{peer: Peer, peerId: string}>}
+   */
+  async createPeer() {
+    return new Promise((resolve, reject) => {
+      if (typeof Peer === "undefined") {
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js";
+        script.onload = () => this.createPeer().then(resolve).catch(reject);
+        script.onerror = () => reject(new Error("Failed to load PeerJS"));
+        document.head.appendChild(script);
+        return;
+      }
+      const peer = new Peer(undefined, {
+        host: "0.peerjs.com",
+        port: 443,
+        path: "/",
+        secure: true,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+          ],
+        },
+      });
+      peer.on("open", (id) => resolve({ peer, peerId: id }));
+      peer.on("error", reject);
+    });
+  }
+
+  /**
    * Generate a random room code
    * @returns {string} 4-digit room code
    */

@@ -391,6 +391,32 @@ class Renderer {
         ctx.stroke();
       }
 
+      // Swordsman Parry ring: gold when engaged, dim grey while on cooldown.
+      if (t.type === "swordsman") {
+        const parryR = (t.radius || 0.25) * ts + 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, parryR, 0, Math.PI * 2);
+        ctx.strokeStyle = t.parryEngaged ? "rgba(255,215,0,0.85)" : "rgba(140,140,140,0.4)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Settler capture progress counter above the aura.
+      if (t.type === "settler") {
+        const captured = t.tilesCaptured || 0;
+        const labelY = cy - auraR - 4;
+        const label = captured + "/3";
+        ctx.font = "bold " + Math.round(ts * 0.28) + "px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(label, cx, labelY);
+        ctx.fillStyle = "#e8ff80";
+        ctx.fillText(label, cx, labelY);
+        ctx.textAlign = "start";
+      }
+
       // Chill stack visual: blue ring whose alpha scales with stack count.
       // Frozen troops get a saturated white-blue overlay during the 1s freeze.
       const now = performance.now() / 1000;

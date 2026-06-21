@@ -133,7 +133,7 @@ const buildingTypes = {
 const strategemTypes = {
   heal: {
     tpCost: 1.0,
-    cooldown: 10,
+    cooldown: 5,
     targeting: "tile",
     duration: 3.5,
     radius: 3,
@@ -143,7 +143,7 @@ const strategemTypes = {
   },
   wind: {
     tpCost: 1.0,
-    cooldown: 14,
+    cooldown: 5,
     targeting: "twoClick",
     duration: 6,
     length: 8,
@@ -154,7 +154,7 @@ const strategemTypes = {
   },
   necromancy: {
     tpCost: 2,
-    cooldown: 25,
+    cooldown: 5,
     targeting: "tile",
     duration: 18,
     radius: 6,
@@ -164,7 +164,7 @@ const strategemTypes = {
   },
   ruin: {
     tpCost: 2.5,
-    cooldown: 16,
+    cooldown: 5,
     targeting: "tile",
     duration: 4,
     radius: 2,
@@ -176,7 +176,7 @@ const strategemTypes = {
   },
   blast: {
     tpCost: 1.5,
-    cooldown: 12,
+    cooldown: 5,
     targeting: "tile",
     duration: 0.5,
     instant: true,
@@ -188,7 +188,7 @@ const strategemTypes = {
   },
   chainLightning: {
     tpCost: 2.5,
-    cooldown: 22,
+    cooldown: 5,
     targeting: "tile",
     duration: 15,
     activationTime: 3,
@@ -203,7 +203,7 @@ const strategemTypes = {
   },
   gravityField: {
     tpCost: 2.0,
-    cooldown: 12,
+    cooldown: 5,
     targeting: "tile",
     duration: 4,
     radius: 4,
@@ -212,7 +212,7 @@ const strategemTypes = {
   },
   lesserTeleport: {
     tpCost: 2.5,
-    cooldown: 16,
+    cooldown: 5,
     targeting: "twoClick",
     duration: 4.5,
     activationTime: 4,
@@ -222,7 +222,7 @@ const strategemTypes = {
   },
   greaterTeleport: {
     tpCost: 3.5,
-    cooldown: 25,
+    cooldown: 5,
     targeting: "twoClick",
     duration: 8.5,
     activationTime: 8,
@@ -235,7 +235,7 @@ const strategemTypes = {
   // effect linger briefly after a troop leaves. Heroes get muted multipliers.
   chronoHaste: {
     tpCost: 2,
-    cooldown: 14,
+    cooldown: 5,
     targeting: "tile",
     duration: 5,
     radius: 2,
@@ -248,7 +248,7 @@ const strategemTypes = {
   },
   chronoSlow: {
     tpCost: 2.5,
-    cooldown: 18,
+    cooldown: 5,
     targeting: "tile",
     duration: 8,
     radius: 3,
@@ -261,7 +261,7 @@ const strategemTypes = {
   },
   chronoStop: {
     tpCost: 3,
-    cooldown: 22,
+    cooldown: 5,
     targeting: "tile",
     duration: 4,
     radius: 1.5,
@@ -290,7 +290,7 @@ const heroAbilityTypes = {
   summoningStrike: {
     heroType: "brickMcStick",
     tpCost: 1.5,
-    cooldown: 18,
+    cooldown: 10,
     radius: 1, // 3x3 box: |dCol|<=1 && |dRow|<=1
     damage: 60,
     knockback: 1.5,
@@ -302,7 +302,7 @@ const heroAbilityTypes = {
   ambush: {
     heroType: "strategia",
     tpCost: 1.5,
-    cooldown: 22,
+    cooldown: 10,
     duration: 3,
     hasteFactor: 1.5,
     hasteAttackFactor: 1.5,
@@ -319,9 +319,9 @@ const heroAbilityTypes = {
  */
 const troopTypes = {
   swordsman: {
-    cost: 1.0,
+    cost: 1.5,
     hp: 45,
-    damage: 23,
+    damage: 17,
     attackSpeed: 1.2,
     range: 1,
     vision: 5,

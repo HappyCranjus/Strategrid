@@ -28,7 +28,7 @@ window.applyKnockback = applyKnockback;
  * source — melee, tower fire, splash, DOT, strategem AoE — gets the same
  * treatment without each caller having to re-implement the math.
  */
-function applyDamage(target, raw) {
+function applyDamage(target, raw, opts) {
   if (!target || raw <= 0) return;
   // Ninja cloak uses the same invisible flag for targeting but is NOT phase-
   // shifted — AoE damage reveals her. Break the cloak first so the hit lands
@@ -53,6 +53,21 @@ function applyDamage(target, raw) {
     for (const occ of target.occupants.slice()) applyDamage(occ, perOccupant);
     raw = raw * (1 - occShare);
     if (raw <= 0) return;
+  }
+
+  // Swordsman Parry: engaged = 50% reduction vs ranged (>2 tiles); melee absorbs 15 flat then consumes Parry.
+  if (target.type === "swordsman" && target.parryEngaged) {
+    const ax = opts && opts.attackerCol, ar = opts && opts.attackerRow;
+    if (ax !== undefined && ar !== undefined) {
+      const dx = target.col - ax, dy = target.row - ar;
+      if (Math.sqrt(dx * dx + dy * dy) > 2) {
+        raw *= 0.5;
+      } else {
+        raw = Math.max(0, raw - 8);
+        target.parryEngaged = false;
+        target.parryCooldown = 3.5;
+      }
+    }
   }
 
   const dr = target.damageReduction || 0;
@@ -137,6 +152,24 @@ class TroopSystem {
       // In-flight troops are being moved + interpolated by _updateOgreThrows;
       // skip the normal per-troop update so they don't try to walk/attack mid-arc.
       if (troop.inFlight) continue;
+
+      // Swordsman Parry cooldown tick + lazy init.
+      if (troop.type === "swordsman") {
+        if (troop.parryEngaged === undefined) troop.parryEngaged = true;
+        if ((troop.parryCooldown || 0) > 0) {
+          troop.parryCooldown -= deltaTime;
+          if (troop.parryCooldown <= 0) {
+            troop.parryCooldown = 0;
+            troop.parryEngaged = true;
+          }
+        }
+      }
+
+      // Settler mission complete: silent despawn (no death sound, no Necromancy).
+      if (troop.settlerDone) {
+        gs.troops.splice(i, 1);
+        continue;
+      }
 
       // Bannerman "Inspired" aura — set by _applyInspirationZones earlier this
       // frame. Read once here so regen and the movement/attack blocks below
@@ -288,6 +321,7 @@ class TroopSystem {
         if (troop.attackTimer >= attackInterval) {
           troop.attackTimer -= attackInterval;
           const wasAlive = target.hp > 0;
+          const atkOpts = { attackerCol: troop.col, attackerRow: troop.row };
           // First swing breaks the spawn cloak (before damage so the hit lands
           // on a target that already sees the popup of a revealed assassin).
           if (troop.type === "ninja" && troop.cloakActive) {
@@ -313,7 +347,7 @@ class TroopSystem {
               if (t.hp <= 0 || (t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
               const dx = t.col - impactCol;
               const dy = t.row - impactRow;
-              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(t, splash);
+              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(t, splash, { attackerCol: impactCol, attackerRow: impactRow });
             }
             for (const b of gs.buildings) {
               if (b.owner !== enemyOwner) continue;
@@ -322,7 +356,7 @@ class TroopSystem {
               const bcy = b.row + (b.height || 1) / 2;
               const dx = bcx - impactCol;
               const dy = bcy - impactRow;
-              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(b, splash);
+              if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(b, splash, { attackerCol: impactCol, attackerRow: impactRow });
             }
             if (gs.damagePopups) {
               gs.damagePopups.push({
@@ -352,9 +386,9 @@ class TroopSystem {
             // and ALL buildings. Stacks multiplicatively with target.damageReduction.
             const isResistant = target.isHero || (gs.buildings && gs.buildings.indexOf(target) !== -1);
             if (isResistant) dmg *= 0.2;
-            applyDamage(target, dmg);
+            applyDamage(target, dmg, atkOpts);
           } else {
-            applyDamage(target, troop.damage);
+            applyDamage(target, troop.damage, atkOpts);
           }
           if (troop.type === "brute" && wasAlive && target.hp <= 0) {
             const bdef = window.troopTypes ? window.troopTypes.brute : null;
@@ -404,7 +438,7 @@ class TroopSystem {
               if (along < 0 || along > len) continue;
               if (Math.abs(across) > halfW) continue;
               applyKnockback(t, ox, oy, dist);
-              if (splash > 0) applyDamage(t, splash);
+              if (splash > 0) applyDamage(t, splash, { attackerCol: troop.col + 0.5, attackerRow: troop.row + 0.5 });
             }
             if (gs.damagePopups) {
               gs.damagePopups.push({
@@ -590,7 +624,7 @@ class TroopSystem {
         const splashR   = (odef && odef.splashRadius) || 1.0;
         const splashDmg = (odef && odef.splashDamage) || 20;
 
-        applyDamage(t, impactDmg);
+        applyDamage(t, impactDmg, { attackerCol: t.thrownStart ? t.thrownStart.col : t.col, attackerRow: t.thrownStart ? t.thrownStart.row : t.row });
         t.stunUntil = Math.max(t.stunUntil || 0, now + 0.25);
 
         if (thrownBy) {
@@ -602,7 +636,7 @@ class TroopSystem {
             if ((v.invisible && v.type !== "ninja") || v.garrisonedIn || v.inFlight) continue;
             const dx = v.col - t.col;
             const dy = v.row - t.row;
-            if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(v, splashDmg);
+            if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(v, splashDmg, { attackerCol: t.col, attackerRow: t.row });
           }
         }
 
@@ -793,7 +827,7 @@ class TroopSystem {
       const target = this._highestHpEnemyInRange(wm, rng);
       if (!target) continue; // hold the timer at cd until something appears
       wm.cannonTimer = 0;
-      applyDamage(target, dmg);
+      applyDamage(target, dmg, { attackerCol: wm.col, attackerRow: wm.row });
 
       if (gs.damagePopups) {
         gs.damagePopups.push({
@@ -1249,25 +1283,26 @@ class TroopSystem {
   // touch more tiles per column of advance.
   _stepSettler(troop, speed, dt) {
     const gs = this.gameState;
-    const dirCol = troop.owner === "player1" ? +1 : -1;
-    if (!troop.zigPhase) troop.zigPhase = "vertical";
+    this._stepForward(troop, speed, dt);
 
-    if (troop.zigPhase === "advancing") {
-      const aimCol = Math.max(0.5, Math.min(gs.cols - 0.5, troop.zigTargetCol));
-      this._stepToward(troop, aimCol, troop.row, speed, dt);
-      if (Math.abs(troop.col - aimCol) < 0.15) {
-        troop.zigPhase = "vertical";
+    // Lazy init tile-capture state on first call.
+    if (troop.lastCaptureTileCol === undefined) {
+      troop.lastCaptureTileCol = Math.floor(troop.col);
+      troop.tilesCaptured = 0;
+    }
+
+    const currentCol = Math.floor(troop.col);
+    if (currentCol !== troop.lastCaptureTileCol) {
+      troop.lastCaptureTileCol = currentCol;
+      const r = Math.round(troop.row);
+      if (r >= 0 && r < gs.rows && currentCol >= 0 && currentCol < gs.cols) {
+        const sign = troop.owner === "player1" ? 1 : -1;
+        gs.grid[r][currentCol].influence = sign;
+        gs.grid[r][currentCol].owner = troop.owner;
       }
-    } else {
-      const aimRow = Math.max(
-        0.5,
-        Math.min(gs.rows - 0.5, troop.deployedRow + 2 * troop.zigDir)
-      );
-      this._stepToward(troop, troop.col, aimRow, speed, dt);
-      if (Math.abs(troop.row - aimRow) < 0.15) {
-        troop.zigDir = -troop.zigDir;
-        troop.zigPhase = "advancing";
-        troop.zigTargetCol = troop.col + dirCol;
+      troop.tilesCaptured = (troop.tilesCaptured || 0) + 1;
+      if (troop.tilesCaptured >= 3) {
+        troop.settlerDone = true;
       }
     }
   }

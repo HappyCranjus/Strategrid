@@ -442,6 +442,41 @@ class NetworkingSystem {
   }
 
   /**
+   * Set up networking as the host side of a matchmaking pair.
+   * The caller has already created the PeerJS peer and registered its ID
+   * with the matchmaking server; we just need to wait for the joiner to connect.
+   * @param {Peer} peer - Open PeerJS peer instance
+   */
+  startAsMatchmakingHost(peer) {
+    this.isHost = true;
+    this.localPlayerId = "player1";
+    this.remotePlayerId = "player2";
+    this.connectionState = "connecting";
+    this.peer = peer;
+    peer.on("connection", (conn) => {
+      this.dataChannel = conn;
+      this.setupDataChannel();
+    });
+  }
+
+  /**
+   * Set up networking as the joiner side of a matchmaking pair.
+   * The caller has the host's peer ID from the matchmaking server.
+   * @param {Peer} peer - Open PeerJS peer instance (created before matchmaker call)
+   * @param {string} hostPeerId - The host's PeerJS peer ID from the matchmaker
+   */
+  startAsMatchmakingJoiner(peer, hostPeerId) {
+    this.isHost = false;
+    this.localPlayerId = "player2";
+    this.remotePlayerId = "player1";
+    this.connectionState = "connecting";
+    this.peer = peer;
+    const conn = peer.connect(hostPeerId);
+    this.dataChannel = conn;
+    this.setupDataChannel();
+  }
+
+  /**
    * Disconnect from multiplayer
    */
   disconnect() {

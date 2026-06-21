@@ -70,8 +70,9 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
 
     if (networkingSystem.matchmakingTimers) {
       const t = networkingSystem.matchmakingTimers;
-      if (t.timerInterval)    { clearInterval(t.timerInterval);    t.timerInterval = null; }
-      if (t.roomCodeInterval) { clearInterval(t.roomCodeInterval); t.roomCodeInterval = null; }
+      if (t.timerInterval)     { clearInterval(t.timerInterval);     t.timerInterval = null; }
+      if (t.roomCodeInterval)  { clearInterval(t.roomCodeInterval);  t.roomCodeInterval = null; }
+      if (t.heartbeatInterval) { clearInterval(t.heartbeatInterval); t.heartbeatInterval = null; }
     }
 
     const doStart = () => {
@@ -189,11 +190,90 @@ function wireConnectionButtons(networkingSystem, statusText) {
 }
 
 /**
- * Stub for open matchmaking (re-enabled in Phase C). For now, only room-code PvP is supported.
+ * Open matchmaking: creates a PeerJS peer, registers it with the Cloudflare
+ * matchmaking Worker, then enters host or joiner flow depending on the server response.
+ * The host sends a heartbeat every 45 s to refresh its server-side slot so it
+ * can wait patiently for an opponent without expiring.
  */
 async function startMatchmaking(networkingSystem, statusText) {
-  console.warn("[Matchmaking] Open matchmaking is not implemented yet — use Room Code mode");
-  if (statusText) statusText.textContent = "Open matchmaking not yet implemented — use Room Code mode.";
+  // ── UPDATE THIS URL after running `wrangler deploy` in the matchmaker/ directory ──
+  const MATCHMAKER_URL = "https://strategrid-matchmaker.happycranjus.workers.dev/matchmake";
+
+  const choiceSection = document.getElementById("choiceSection");
+  const mmSection     = document.getElementById("matchmakingSection");
+  const mmStatus      = document.getElementById("matchmakingStatus");
+  const mmTimer       = document.getElementById("matchmakingTimer");
+  if (choiceSection) choiceSection.style.display = "none";
+  if (mmSection)     mmSection.style.display = "block";
+
+  const startTime = Date.now();
+  const timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    if (mmTimer) mmTimer.textContent = `${mm}:${ss}`;
+  }, 1000);
+  networkingSystem.matchmakingTimers = { timerInterval, roomCodeInterval: null, heartbeatInterval: null };
+
+  try {
+    if (mmStatus) mmStatus.textContent = "Connecting…";
+    const { peer, peerId } = await networkingSystem.signalingClient.createPeer();
+
+    if (mmStatus) mmStatus.textContent = "Finding opponent…";
+    const resp = await fetch(MATCHMAKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ peerId }),
+    });
+    if (!resp.ok) throw new Error(`Matchmaker returned ${resp.status}`);
+    const { role, hostPeerId } = await resp.json();
+
+    if (role === "host") {
+      if (mmStatus) mmStatus.textContent = "Waiting for opponent…";
+      networkingSystem.startAsMatchmakingHost(peer);
+
+      // Heartbeat: re-register every 45 s so the server-side TTL slot stays alive.
+      const heartbeat = setInterval(async () => {
+        try {
+          const r = await fetch(MATCHMAKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ peerId }),
+          });
+          if (!r.ok) return;
+          const hBody = await r.json();
+          if (hBody.role === "joiner") {
+            // Rare: DO was reset between heartbeats; act as joiner now.
+            clearInterval(heartbeat);
+            networkingSystem.matchmakingTimers.heartbeatInterval = null;
+            networkingSystem.startAsMatchmakingJoiner(peer, hBody.hostPeerId);
+          }
+          // role === "host" → slot refreshed, nothing else to do
+        } catch {}
+      }, 45_000);
+      networkingSystem.matchmakingTimers.heartbeatInterval = heartbeat;
+
+      // Stop heartbeat once a joiner connects.
+      peer.on("connection", () => {
+        clearInterval(heartbeat);
+        if (networkingSystem.matchmakingTimers) networkingSystem.matchmakingTimers.heartbeatInterval = null;
+      });
+
+      // If the PeerJS broker drops the idle connection, reconnect so the peer
+      // ID remains valid when the joiner eventually arrives.
+      peer.on("disconnected", () => {
+        if (networkingSystem.connectionState === "connecting") peer.reconnect();
+      });
+    } else {
+      if (mmStatus) mmStatus.textContent = "Opponent found! Connecting…";
+      networkingSystem.startAsMatchmakingJoiner(peer, hostPeerId);
+    }
+  } catch (err) {
+    clearInterval(timerInterval);
+    const detail = err && err.message ? err.message : String(err);
+    if (mmStatus) mmStatus.textContent = `Matchmaking failed: ${detail}`;
+    console.error("[Matchmaking]", err);
+  }
 }
 
 // Display labels keyed by troop / building / strategem / hero-ability identifier.

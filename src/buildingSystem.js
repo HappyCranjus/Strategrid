@@ -127,7 +127,9 @@ class BuildingSystem {
     if (b.attackTimer < def.attackCooldown) return;
 
     b.attackTimer = 0;
-    window.applyDamage(target, def.damage);
+    const ccx = b.col + (b.width  || 1) / 2;
+    const ccy = b.row + (b.height || 1) / 2;
+    window.applyDamage(target, def.damage, { attackerCol: ccx, attackerRow: ccy });
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
   }
@@ -145,7 +147,9 @@ class BuildingSystem {
     if (b.attackTimer < def.attackCooldown) return;
 
     b.attackTimer = 0;
-    window.applyDamage(target, def.damage);
+    const chillCx = b.col + (b.width  || 1) / 2;
+    const chillCy = b.row + (b.height || 1) / 2;
+    window.applyDamage(target, def.damage, { attackerCol: chillCx, attackerRow: chillCy });
     applyChillStacks(target, def.chillStacksPerHit || 2);
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
@@ -168,6 +172,8 @@ class BuildingSystem {
 
     b.attackTimer = 0;
 
+    const lavaCx = b.col + (b.width  || 1) / 2;
+    const lavaCy = b.row + (b.height || 1) / 2;
     // Splash on impact. Ninja cloak is NOT phase-shifted — splash hits and
     // reveals her (cloak-break is in applyDamage); other invisible units
     // (Ambush, Teleport) remain protected.
@@ -177,7 +183,7 @@ class BuildingSystem {
       const dx = t.col - target.col;
       const dy = t.row - target.row;
       if (Math.sqrt(dx * dx + dy * dy) <= def.splashRadius) {
-        window.applyDamage(t, def.damage);
+        window.applyDamage(t, def.damage, { attackerCol: lavaCx, attackerRow: lavaCy });
       }
     }
 
@@ -224,7 +230,9 @@ class BuildingSystem {
     if (b.attackTimer < def.attackCooldown) return;
 
     b.attackTimer = 0;
-    window.applyDamage(target, def.damage);
+    const towerCx = b.col + (b.width  || 1) / 2;
+    const towerCy = b.row + (b.height || 1) / 2;
+    window.applyDamage(target, def.damage, { attackerCol: towerCx, attackerRow: towerCy });
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
   }
@@ -411,7 +419,9 @@ class BuildingSystem {
     if (b.attackTimer < def.attackCooldown) return;
 
     b.attackTimer = 0;
-    window.applyDamage(hero, def.damage);
+    const reaperCx = b.col + (b.width  || 1) / 2;
+    const reaperCy = b.row + (b.height || 1) / 2;
+    window.applyDamage(hero, def.damage, { attackerCol: reaperCx, attackerRow: reaperCy });
     b.attackFlashTarget = hero;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
 
