@@ -454,3 +454,46 @@ canvas {
   position: relative;
 }
 .progress-fill { height: 100%; background: #4caf50; width: 0%; }
+
+/* ── Phase countdown overlay ─────────────────────────────────── */
+#countdownOverlay {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 10001;
+  line-height: 1;
+}
+#countdownLabel {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 6px #000, 0 0 2px #000;
+  margin-bottom: 4px;
+}
+#countdownNumber {
+  font-size: 200px;
+  font-weight: 900;
+  color: #f5c518;
+  text-shadow:
+    3px  3px 0 #000,
+   -3px -3px 0 #000,
+    3px -3px 0 #000,
+   -3px  3px 0 #000,
+    0 0 60px rgba(255, 160, 0, 0.6);
+  letter-spacing: -0.04em;
+}
+#countdownOverlay.critical #countdownNumber {
+  color: #ff2828;
+  text-shadow:
+    3px  3px 0 #000,
+   -3px -3px 0 #000,
+    3px -3px 0 #000,
+   -3px  3px 0 #000,
+    0 0 70px rgba(255, 0, 0, 0.7);
+}

@@ -272,6 +272,8 @@ class GameState {
       maxTP: this.maxTP,
       phase: this.phase,
       matchTime: this.matchTime,
+      phaseDuration: this.phaseDuration,
+      phaseTimeRemaining: this.phaseTimeRemaining,
       grid: this.grid,
       gameOver: this.gameOver,
       winner: this.winner,
@@ -304,7 +306,9 @@ class GameState {
     if (state.maxRP) this.maxRP = state.maxRP;
     if (state.maxTP) this.maxTP = state.maxTP;
     if (state.phase) this.phase = state.phase;
-    if (typeof state.matchTime === "number") this.matchTime = state.matchTime;
+    if (typeof state.matchTime          === "number") this.matchTime          = state.matchTime;
+    if (typeof state.phaseDuration      === "number") this.phaseDuration      = state.phaseDuration;
+    if (typeof state.phaseTimeRemaining === "number") this.phaseTimeRemaining = state.phaseTimeRemaining;
     if (state.grid && state.grid.length > 0) this.grid = state.grid;
 
     // Re-resolve hero refs through the freshly-installed troops array.

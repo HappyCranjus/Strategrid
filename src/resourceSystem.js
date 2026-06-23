@@ -71,9 +71,29 @@ class ResourceSystem {
       gs.maxTP.player1 = gs.maxTP.player2 = maxTP;
     }
 
-    // Update HTML resource bars. The local-vs-opponent mapping is wired in Phase C
-    // once networkingSystem reports who the local player is. For Phase A we assume
-    // the local side is "player1" so the bars at least populate during single-window tests.
+    this.renderHUD();
+  }
+
+  renderHUD() {
+    const gs = this.gameState;
+    if (!gs) return;
+
+    let p1Tiles = 0, p2Tiles = 0;
+    for (let r = 0; r < gs.rows; r++) {
+      for (let c = 0; c < gs.cols; c++) {
+        const o = gs.grid[r][c].owner;
+        if (o === "player1") p1Tiles++;
+        else if (o === "player2") p2Tiles++;
+      }
+    }
+    const tileCounts = { player1: p1Tiles, player2: p2Tiles };
+
+    const isSandbox = gs.gameMode === "sandbox";
+    const caps = ResourceSystem.PHASE_CAPS[gs.phase] || { rp: 10, tp: 5 };
+    const maxRP = isSandbox ? (gs.maxRP.player1 || caps.rp) : caps.rp;
+    const maxTP = isSandbox ? (gs.maxTP.player1 || caps.tp) : caps.tp;
+    const [base, scale] = ResourceSystem.PHASE_RATES[gs.phase] || [0, 0];
+
     const localId = (window.networkingSystem && window.networkingSystem.getLocalPlayerId &&
                      window.networkingSystem.getLocalPlayerId()) || "player1";
     const oppId = localId === "player1" ? "player2" : "player1";
@@ -83,12 +103,12 @@ class ResourceSystem {
     this._updateBar("rpBarOpponent", gs.currentRP[oppId],   maxRP);
     this._updateBar("tpBarOpponent", gs.currentTP[oppId],   maxTP);
 
-    this._setText("rpValuePlayer",   gs.currentRP[localId].toFixed(1));
-    this._setText("rpValueOpponent", gs.currentRP[oppId].toFixed(1));
-    this._setText("rpRatePlayer",   "+" + rates[localId].toFixed(2));
-    this._setText("rpRateOpponent", "+" + rates[oppId].toFixed(2));
-    this._setText("tpValuePlayer",   gs.currentTP[localId].toFixed(1));
-    this._setText("tpValueOpponent", gs.currentTP[oppId].toFixed(1));
+    this._setText("rpValuePlayer",   (gs.currentRP[localId] || 0).toFixed(1));
+    this._setText("rpValueOpponent", (gs.currentRP[oppId]   || 0).toFixed(1));
+    this._setText("rpRatePlayer",   "+" + (base + scale * tileCounts[localId]).toFixed(2));
+    this._setText("rpRateOpponent", "+" + (base + scale * tileCounts[oppId]).toFixed(2));
+    this._setText("tpValuePlayer",   (gs.currentTP[localId] || 0).toFixed(1));
+    this._setText("tpValueOpponent", (gs.currentTP[oppId]   || 0).toFixed(1));
     this._setText("tilesPlayer",   tileCounts[localId]);
     this._setText("tilesOpponent", tileCounts[oppId]);
   }

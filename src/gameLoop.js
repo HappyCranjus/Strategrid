@@ -87,6 +87,8 @@ class GameLoop {
               if (strategemSystem) strategemSystem.update(deltaTime);
             }
           }
+          // Guest: simulation is skipped but HUD still needs to reflect synced state.
+          if (isNetworkClient && resourceSystem) resourceSystem.renderHUD();
           // Hero input runs on both host and client (PvP client sends heroPosition to host)
           if (heroInput) heroInput.update(deltaTime);
         }

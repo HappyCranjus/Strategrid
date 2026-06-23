@@ -250,6 +250,18 @@ class NetworkingSystem {
           }
           break;
 
+        case "deckUpdate":
+          // Opponent's full updated deck after intermission picks.
+          if (window.deckSystem && message.deck) {
+            const remoteId = this.remotePlayerId;
+            const wasProtected = window.deckSystem.player2DeckSetFromNetwork;
+            window.deckSystem.player2DeckSetFromNetwork = false;
+            window.deckSystem.setPlayerDeck(remoteId, message.deck);
+            window.deckSystem.player2DeckSetFromNetwork = wasProtected;
+            if (window.buildHotkeyRails) window.buildHotkeyRails(this);
+          }
+          break;
+
         default:
           console.warn("[Networking] Unknown message type:", message.type);
       }

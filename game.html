@@ -71,6 +71,12 @@
           </div>
         </div>
       </div>
+
+      <!-- Phase countdown overlay: large centered number during final 6 s of each phase -->
+      <div id="countdownOverlay">
+        <div id="countdownLabel"></div>
+        <div id="countdownNumber"></div>
+      </div>
     </div>
 
     <!-- Multiplayer Connection Overlay -->
@@ -127,11 +133,11 @@
     <!-- Load modules in dependency order -->
     <script src="src/audioManager.js?v=2"></script>
     <script src="src/gameLogic.js?v=10"></script>
-    <script src="src/gameState.js?v=10"></script>
+    <script src="src/gameState.js?v=11"></script>
     <script src="src/deckSystem.js?v=3"></script>
     <script src="src/influenceSystem.js?v=3"></script>
     <script src="src/phaseSystem.js?v=1"></script>
-    <script src="src/resourceSystem.js?v=5"></script>
+    <script src="src/resourceSystem.js?v=6"></script>
     <script src="src/troopSystem.js?v=15"></script>
     <script src="src/buildingSystem.js?v=6"></script>
     <script src="src/strategemSystem.js?v=3"></script>
@@ -139,12 +145,12 @@
     <script src="src/renderer.js?v=20"></script>
     <script src="src/uiState.js?v=6"></script>
     <script src="src/signalingClient.js?v=2"></script>
-    <script src="src/networkingSystem.js?v=5"></script>
+    <script src="src/networkingSystem.js?v=6"></script>
     <script src="src/heroInput.js?v=8"></script>
-    <script src="src/gameLoop.js?v=6"></script>
+    <script src="src/gameLoop.js?v=7"></script>
     <script src="src/gameSetup.js?v=5"></script>
     <script src="src/aiController.js?v=1"></script>
-    <script src="src/game.js?v=12"></script>
+    <script src="src/game.js?v=15"></script>
 
     <script>
       // Pause + Mute toggles

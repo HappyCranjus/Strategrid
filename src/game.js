@@ -82,6 +82,7 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
       window.gameSetupResult.buildingSystem.placeInitialTurrets();
       if (networkingSystem.isHost) networkingSystem.startStateSync();
       installPhaseTimerHUD();
+      installIntermissionOverlay(networkingSystem.getLocalPlayerId());
       gameLoop.start();
       setTimeout(() => buildHotkeyRails(networkingSystem), 200);
     };
@@ -474,7 +475,7 @@ function startPvC() {
 
   buildHotkeyRails(null);
 
-  installIntermissionOverlay();
+  installIntermissionOverlay("player1");
   installPhaseTimerHUD();
 
   window.gameSetupResult.gameLoop.start();
@@ -492,13 +493,20 @@ const PVC_DISPLAY_NAMES = {
   chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
 };
 
+function _sendDeckUpdate(localPlayerId) {
+  const ns = window.gameSetupResult && window.gameSetupResult.networkingSystem;
+  if (!ns || !window.deckSystem) return;
+  const deck = window.deckSystem.getPlayerDeck(localPlayerId);
+  if (deck) ns.sendMessage({ type: "deckUpdate", deck });
+}
+
 /**
  * Watch the phase clock; on entry to intermission1/2, show a modal letting the
  * human pick one new troop + one new strategem. On exit, auto-pick if the user
  * didn't confirm so the test always exercises deck growth. Re-renders the deck
  * button row after a pick (human or auto) so the new entries become usable.
  */
-function installIntermissionOverlay() {
+function installIntermissionOverlay(localPlayerId) {
   const gs = window.gameState;
   const ds = window.deckSystem;
   if (!gs || !ds) return;
@@ -514,21 +522,25 @@ function installIntermissionOverlay() {
 
     if (INTERMISSION_PHASES.has(phase)) {
       confirmedThisRound = false;
-      showIntermissionModal(ds, () => { confirmedThisRound = true; });
+      showIntermissionModal(ds, localPlayerId, () => { confirmedThisRound = true; });
     } else if (INTERMISSION_PHASES.has(lastPhase)) {
-      if (!confirmedThisRound) autoPickIntermission(ds, "player1");
+      if (!confirmedThisRound) {
+        autoPickIntermission(ds, localPlayerId);
+        _sendDeckUpdate(localPlayerId);
+      }
       hideIntermissionModal();
-      buildHotkeyRails(null);
+      const ns = window.gameSetupResult && window.gameSetupResult.networkingSystem;
+      buildHotkeyRails(ns || null);
     }
 
     lastPhase = phase;
   }, 200);
 }
 
-function showIntermissionModal(ds, onConfirm) {
+function showIntermissionModal(ds, localPlayerId, onConfirm) {
   hideIntermissionModal();
 
-  const deck = ds.getPlayerDeck("player1");
+  const deck = ds.getPlayerDeck(localPlayerId);
   const remainingTroops = ds.getAvailableTroops().filter((t) => !deck.troops.includes(t));
   const remainingStrats = ds.getAvailableStrategems().filter((s) => !deck.strategems.includes(s));
 
@@ -583,10 +595,12 @@ function showIntermissionModal(ds, onConfirm) {
 
   confirmBtn.addEventListener("click", () => {
     if (!(chosenTroop && chosenStrat)) return;
-    ds.addTroop("player1", chosenTroop);
-    ds.addStrategem("player1", chosenStrat);
+    ds.addTroop(localPlayerId, chosenTroop);
+    ds.addStrategem(localPlayerId, chosenStrat);
     hideIntermissionModal();
-    buildHotkeyRails(null);
+    _sendDeckUpdate(localPlayerId);
+    const ns = window.gameSetupResult && window.gameSetupResult.networkingSystem;
+    buildHotkeyRails(ns || null);
     if (typeof onConfirm === "function") onConfirm();
   });
 }
@@ -963,5 +977,32 @@ function updatePhaseHUD() {
     const elapsed = duration - remaining;
     const pct = Math.max(0, Math.min(100, (elapsed / duration) * 100));
     bar.style.width = `${pct}%`;
+  }
+
+  const cdOverlay = document.getElementById("countdownOverlay");
+  const cdNumber  = document.getElementById("countdownNumber");
+  const cdLabel   = document.getElementById("countdownLabel");
+  if (cdOverlay && cdNumber) {
+    if (remaining > 0 && remaining <= 6 && gs.phase) {
+      cdOverlay.style.display = "block";
+      const NEXT_LABEL = {
+        opening:       "Intermission",
+        intermission1: "Assault begins",
+        assault:       "Intermission",
+        intermission2: "Endgame begins",
+        endgame:       "Game over",
+      };
+      if (cdLabel) cdLabel.textContent = NEXT_LABEL[gs.phase] || "";
+      if (remaining <= 3) {
+        cdNumber.textContent = remaining.toFixed(1);
+        cdOverlay.classList.add("critical");
+      } else {
+        cdNumber.textContent = String(Math.ceil(remaining));
+        cdOverlay.classList.remove("critical");
+      }
+    } else {
+      cdOverlay.style.display = "none";
+      cdOverlay.classList.remove("critical");
+    }
   }
 }
