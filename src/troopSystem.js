@@ -398,6 +398,8 @@ class TroopSystem {
             troop.berserkerUntil        = now + dur;
             troop.berserkerSpeedFactor  = (bdef && bdef.berserkerSpeedFactor)  || 2.0;
             troop.berserkerAttackFactor = (bdef && bdef.berserkerAttackFactor) || 2.0;
+            const amBrute = window.gameSetupResult && window.gameSetupResult.audioManager;
+            if (amBrute) amBrute.playSound("bruteRage");
             if (gs.damagePopups) {
               gs.damagePopups.push({
                 col: troop.col,
@@ -828,6 +830,8 @@ class TroopSystem {
       if (!target) continue; // hold the timer at cd until something appears
       wm.cannonTimer = 0;
       applyDamage(target, dmg, { attackerCol: wm.col, attackerRow: wm.row });
+      const amWM = window.gameSetupResult && window.gameSetupResult.audioManager;
+      if (amWM) amWM.playThrottled("sentinelAttack", 200);
 
       if (gs.damagePopups) {
         gs.damagePopups.push({
@@ -1299,6 +1303,8 @@ class TroopSystem {
         const sign = troop.owner === "player1" ? 1 : -1;
         gs.grid[r][currentCol].influence = sign;
         gs.grid[r][currentCol].owner = troop.owner;
+        const amSettler = window.gameSetupResult && window.gameSetupResult.audioManager;
+        if (amSettler) amSettler.playThrottled("settlerYoink", 200);
       }
       troop.tilesCaptured = (troop.tilesCaptured || 0) + 1;
       if (troop.tilesCaptured >= 3) {

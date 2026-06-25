@@ -51,6 +51,13 @@ class ResourceSystem {
     const TP_BASE = 0.125;
     const rates = {};
     const tpRates = {};
+
+    const am = window.gameSetupResult && window.gameSetupResult.audioManager;
+    const localId = (window.networkingSystem && window.networkingSystem.getLocalPlayerId &&
+                     window.networkingSystem.getLocalPlayerId()) || "player1";
+    const prevRP = gs.currentRP[localId] || 0;
+    const prevTP = gs.currentTP[localId] || 0;
+
     for (const player of ["player1", "player2"]) {
       const rate = base + scale * tileCounts[player];
       rates[player] = rate;
@@ -61,6 +68,15 @@ class ResourceSystem {
       const tpRate = TP_BASE + tpBonus;
       tpRates[player] = tpRate;
       gs.currentTP[player] = Math.min((gs.currentTP[player] || 0) + tpRate * deltaTime, maxTP);
+    }
+
+    if (am) {
+      const newRP = gs.currentRP[localId];
+      const newTP = gs.currentTP[localId];
+      if (prevRP < maxRP && newRP >= maxRP)                                      am.playSound("fullRP");
+      else if (Math.floor(newRP / 5) > Math.floor(prevRP / 5))                  am.playThrottled("rpMilestone", 500);
+      if (prevTP < maxTP && newTP >= maxTP)                                      am.playSound("fullTP");
+      else if (Math.floor(newTP) > Math.floor(prevTP))                           am.playThrottled("tpGain", 500);
     }
 
     // Keep gs.maxRP/maxTP in sync so building production caps (buildingSystem

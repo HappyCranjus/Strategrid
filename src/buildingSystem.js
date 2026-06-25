@@ -132,6 +132,8 @@ class BuildingSystem {
     window.applyDamage(target, def.damage, { attackerCol: ccx, attackerRow: ccy });
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+    const amCannon = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amCannon) amCannon.playThrottled("cannonFire");
   }
 
   /**
@@ -153,6 +155,8 @@ class BuildingSystem {
     applyChillStacks(target, def.chillStacksPerHit || 2);
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+    const amChill = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amChill) amChill.playThrottled("turretBlaster");
   }
 
   /**
@@ -205,6 +209,8 @@ class BuildingSystem {
 
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+    const amLava = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amLava) amLava.playThrottled("lavaMortarFire");
   }
 
   /**
@@ -235,6 +241,8 @@ class BuildingSystem {
     window.applyDamage(target, def.damage, { attackerCol: towerCx, attackerRow: towerCy });
     b.attackFlashTarget = target;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+    const amTower = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amTower) amTower.playThrottled("turretFire");
   }
 
   /**
@@ -399,7 +407,11 @@ class BuildingSystem {
     const col = Math.max(0.5, Math.min(cols - 0.5, pos.col));
     const row = Math.max(0.5, Math.min(rows - 0.5, pos.row));
     const skel = this.gameLogic.createTroop("skeleton", row, col, building.owner);
-    if (skel) gs.troops.push(skel);
+    if (skel) {
+      gs.troops.push(skel);
+      const amSkel = window.gameSetupResult && window.gameSetupResult.audioManager;
+      if (amSkel) amSkel.playThrottled("spawnSkeleton", 300);
+    }
   }
 
   /** Reaper Turret: fires heavy slugs at the enemy hero only; spawns a Reaper every 100 raw damage dealt. */
@@ -424,6 +436,8 @@ class BuildingSystem {
     window.applyDamage(hero, def.damage, { attackerCol: reaperCx, attackerRow: reaperCy });
     b.attackFlashTarget = hero;
     b.attackFlashUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000 + 0.15;
+    const amReaper = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amReaper) amReaper.playThrottled("turretBlaster");
 
     b.damageAccumulator = (b.damageAccumulator || 0) + def.damage;
     const threshold = def.damagePerReaper || 100;

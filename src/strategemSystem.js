@@ -238,9 +238,15 @@ class StrategemSystem {
 
     const am = window.gameSetupResult && window.gameSetupResult.audioManager;
     if (am) {
-      if (type === "heal")       am.playSound("healSound");
-      else if (type === "wind")  am.playSound("divineWind");
-      else if (type === "blast") am.playSound("boltStormActivation");
+      if      (type === "heal")           am.playSound("healSound");
+      else if (type === "wind")           am.playSound("divineWind");
+      else if (type === "blast")          am.playSound("boltStormActivation");
+      else if (type === "ruin")           am.playSound("ruinActivate");
+      else if (type === "chainLightning") am.playSound("chainLightning");
+      else if (type === "lesserTeleport") am.playSound("lesserTeleport");
+      else if (type === "greaterTeleport") am.playSound("greaterTeleport");
+      else if (type === "chronoHaste")    am.playSound("chronoHaste");
+      else if (type === "chronoStop")     am.playSound("chronoStop");
     }
 
     return entity;
@@ -259,6 +265,8 @@ class StrategemSystem {
     for (const pa of HEAL_PULSE_AGES) {
       if (prevAge < pa && s.age >= pa) {
         this._healInRadius(s, def, def.pulseHeal != null ? def.pulseHeal : 5);
+        const amHeal = window.gameSetupResult && window.gameSetupResult.audioManager;
+        if (amHeal) amHeal.playThrottled("healTick", 400);
       }
     }
   }
@@ -337,6 +345,8 @@ class StrategemSystem {
           troop.activationTime = 0;
           troop.activationDuration = 0;
           gs.troops.push(troop);
+          const amNecro = window.gameSetupResult && window.gameSetupResult.audioManager;
+          if (amNecro) amNecro.playThrottled("spawnSkeleton", 300);
         }
         s.pendingSpawns.splice(i, 1);
       }
@@ -456,6 +466,9 @@ class StrategemSystem {
       hits.push(next); hitSet.add(next);
       window.applyDamage(next, damageOf(next));
     }
+
+    const amCL = window.gameSetupResult && window.gameSetupResult.audioManager;
+    if (amCL && hits.length > 0) amCL.playThrottled("chainLightning", 100);
 
     s.lastHits = hits.map((h) => {
       const c = h.width != null ? h.col + (h.width || 1) / 2 : h.col;
@@ -665,6 +678,10 @@ class StrategemSystem {
       } else {
         t.stunUntil = Math.max(t.stunUntil || 0, now + troopDur);
       }
+    }
+    if (isPulseFrame) {
+      const amStop = window.gameSetupResult && window.gameSetupResult.audioManager;
+      if (amStop) amStop.playThrottled("chronoStop", 450);
     }
   }
 
