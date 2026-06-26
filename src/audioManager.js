@@ -3,16 +3,16 @@
  * @class
  */
 
-// Per-troop activation/attack sound names (loaded in init()). Troops not listed
-// fall back to generic spawn + melee/ranged sounds chosen by attack range.
+// Per-troop attack sound names. Activation sounds removed — only auto-spawned
+// units (skeleton, zombie, commando) play a spawn sound via playTroopSpawn.
 const troopSounds = {
-  swordsman:  { activate: "swordsmanActivation", attack: "swordsmanAttack" },
-  archer:     { activate: "archerActivation",    attack: "archerAttack" },
-  heavy:      { activate: "heavyActivation",     attack: "heavyAttack" },
-  militia:    { activate: "militiaActivation",   attack: "militiaAttack" },
-  brute:      { activate: "bruteActivation",     attack: "bruteAttack" },
-  sentinel:   { activate: "sentinelActivation",  attack: "sentinelAttack" },
-  settler:    { activate: "settlerActivation",   attack: null },
+  swordsman:  { attack: "meleeAttack" },
+  archer:     { attack: "archerAttack" },
+  heavy:      { attack: "heavyAttack" },
+  militia:    { attack: "meleeAttack" },
+  brute:      { attack: "heavyAttack" },
+  sentinel:   { attack: "sentinelAttack" },
+  settler:    { attack: null },
   gustKnight: { attack: "gustKnightAttack" },
   commando:   { attack: "grenadeThrow" },
 };
@@ -28,34 +28,21 @@ class AudioManager {
   /** Load the full SFX set. Call once after construction. */
   init() {
     const sfx = {
-      // ── Troop activation / attack ───────────────────────────────────────────
-      swordsmanActivation:  "sounds/swordsmanActivation.mp3",
-      swordsmanAttack:      "sounds/swordsmanAttack.mp3",
-      archerActivation:     "sounds/archerActivation.mp3",
+      // ── Troop attacks ───────────────────────────────────────────────────────
       archerAttack:         "sounds/archerShoot_sound.wav",
-      heavyActivation:      "sounds/heavyActivation.mp3",
       heavyAttack:          "sounds/heavyMelee.wav",
-      militiaActivation:    "sounds/militiaActivation.mp3",
-      militiaAttack:        "sounds/militiaAttack.mp3",
-      bruteActivation:      "sounds/bruteActivation.wav",
-      bruteAttack:          "sounds/bruteAttack.wav",
       bruteRage:            "sounds/BruteRage_sound.wav",
-      sentinelActivation:   "sounds/sentinelActivation.wav",
       sentinelAttack:       "sounds/gun_sound.wav",
-      settlerActivation:    "sounds/settlerActivation.mp3",
       gustKnightAttack:     "sounds/gustKnightMelee_wind_sound.wav",
       grenadeThrow:         "sounds/grenade_throw_sound.wav",
       // ── Generic fallbacks ───────────────────────────────────────────────────
-      spawnSound:           "sounds/spawnSound.mp3",
       spawnSkeleton:        "sounds/spawn_skeleton_sound.wav",
       deathSound:           "sounds/death_sound.wav",
       meleeAttack:          "sounds/smallMelee.wav",
-      rangedAttack:         "sounds/rangedAttackSound.mp3",
+      rangedAttack:         "sounds/gun_sound.wav",
       // ── Strategems ──────────────────────────────────────────────────────────
-      healSound:            "sounds/healSound.mp3",
+      healSound:            "sounds/heal_tick_sound.wav",
       healTick:             "sounds/heal_tick_sound.wav",
-      boltStormActivation:  "sounds/boltStormActivation.mp3",
-      divineWind:           "sounds/divineWind.mp3",
       ruinActivate:         "sounds/ruin_activate_sound.wav",
       chainLightning:       "sounds/chain_lightning_hit_sound.wav",
       lesserTeleport:       "sounds/lesser_teleport_sound.wav",
@@ -124,10 +111,10 @@ class AudioManager {
     this.sounds[soundName] = audio;
   }
 
-  /** Play a troop's activation sound (or generic spawn for troops without one). */
+  /** Play a spawn sound only for auto-spawned units. */
   playTroopSpawn(troop) {
-    const m = troopSounds[troop.type];
-    this.playSound(m && m.activate ? m.activate : "spawnSound");
+    const SPAWNED = new Set(["skeleton", "zombie", "commando"]);
+    if (SPAWNED.has(troop.type)) this.playThrottled("spawnSkeleton", 300);
   }
 
   /** Play a troop's attack sound (or generic melee/ranged by range). Throttled. */
