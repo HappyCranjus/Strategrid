@@ -5,7 +5,8 @@
   "main": "game.js",
   "scripts": {
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "build": "mkdir -p dist && cp index.html menu.html game.html style.css dist/ && cp -r src images sounds dist/"
   },
   "devDependencies": {
     "jest": "^29.7.0",
