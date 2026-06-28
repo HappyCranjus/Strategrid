@@ -6,7 +6,7 @@
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
-    "build": "mkdir -p dist && cp index.html menu.html game.html style.css dist/ && cp -r src images sounds dist/"
+    "build": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && cp index.html menu.html game.html style.css dist/ && cp -r src images sounds dist/"
   },
   "devDependencies": {
     "jest": "^29.7.0",

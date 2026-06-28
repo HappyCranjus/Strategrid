@@ -183,7 +183,7 @@ class BuildingSystem {
     // (Ambush, Teleport) remain protected.
     for (const t of this.gameState.troops) {
       if (t.owner === b.owner) continue;
-      if ((t.invisible && t.type !== "ninja") || t.inFlight) continue;
+      if ((t.invisible && !t.cloakActive) || t.inFlight) continue;
       const dx = t.col - target.col;
       const dy = t.row - target.row;
       if (Math.sqrt(dx * dx + dy * dy) <= def.splashRadius) {

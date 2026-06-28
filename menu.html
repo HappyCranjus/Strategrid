@@ -2,205 +2,627 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Strategrid - Main Menu</title>
+    <title>Strategrid</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111'/><rect x='2' y='2' width='13' height='13' fill='%233399ff'/><rect x='17' y='2' width='13' height='13' fill='%23ff4444'/><rect x='2' y='17' width='13' height='13' fill='%23ff4444'/><rect x='17' y='17' width='13' height='13' fill='%233399ff'/></svg>">
     <link rel="stylesheet" href="style.css" />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body, html {
         width: 100%; min-height: 100%;
         background-color: #111;
+        background-image:
+          repeating-linear-gradient(0deg, transparent, transparent 39px, #181818 39px, #181818 40px),
+          repeating-linear-gradient(90deg, transparent, transparent 39px, #181818 39px, #181818 40px);
         display: flex; flex-direction: column;
         justify-content: flex-start; align-items: center;
-        font-family: sans-serif; color: #eee;
-        padding: 30px 10px;
+        font-family: 'Barlow', sans-serif; color: #eee;
+        padding: 30px 10px 60px;
       }
-      h1 { font-size: 2rem; margin-bottom: 20px; }
-      h2 { margin-bottom: 30px; font-weight: normal; color: #bbb; }
+      h1 { font-size: 2.2rem; margin-bottom: 8px; font-weight: 700; }
+      h2 { margin-bottom: 28px; font-weight: 400; color: #888; font-size: 1rem; letter-spacing: 0.03em; }
       .menu-btn {
-        display: block; margin: 10px 0;
+        display: block; margin: 8px 0;
         padding: 12px 24px; font-size: 1rem;
+        font-family: 'Barlow', sans-serif; font-weight: 600;
         cursor: pointer; border: none; border-radius: 4px;
-        background: #444; color: #eee;
-        transition: background-color 0.2s ease;
+        border-left: 4px solid transparent;
+        background: #2a2a2a; color: #eee;
+        width: 240px; transition: background 0.15s ease;
       }
-      .menu-btn:hover { background: #555; }
+      .menu-btn:hover { background: #383838; }
     </style>
   </head>
   <body>
-    <h1>Strategrid</h1>
-    <h2>Online PvP</h2>
+    <h1 style="letter-spacing:0.05em; background:linear-gradient(90deg,#00ced1 0%,#cccccc 50%,#ff4040 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">Strategrid</h1>
+    <h2>v1.0 &mdash; Build your deck. Claim the grid.</h2>
 
-    <button class="menu-btn" id="btnPvPRoomCode">PvP (Room Code)</button>
-    <button class="menu-btn" id="btnPvPOpen">PvP (Open Matchmaking)</button>
-    <button class="menu-btn" id="btnPvC" style="background:#36a">Play vs Computer</button>
-    <button class="menu-btn" id="btnSandbox" style="background:#3a5">Sandbox (Dev)</button>
+    <button class="menu-btn" id="btnPvPRoomCode" style="border-left:4px solid #00ced1;">PvP (Room Code)</button>
+    <button class="menu-btn" id="btnPvPOpen"     style="border-left:4px solid #00ced1;">PvP (Open Matchmaking)</button>
+    <button class="menu-btn" id="btnPvC"         style="border-left:4px solid #4caf50;">Play vs Computer</button>
+    <button class="menu-btn" id="btnSandbox"     style="border-left:4px solid #888; opacity:0.75;">Sandbox (Dev)</button>
+    <button class="menu-btn" id="btnHowToPlay"   style="border-left:4px solid #f5c518;">How to Play</button>
+    <button class="menu-btn" id="btnSettings"    style="border-left:4px solid #888;">&#9881; Settings</button>
 
-    <div id="deckBuildingSection" style="margin-top: 30px; width: 480px; max-width: 95vw; text-align: left;">
-      <h3 style="margin-top: 0; margin-bottom: 15px; color: #fff;">Your Deck</h3>
-
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
-          Select 4 Troops: <span id="deckTroopsCount">0</span>/4
-        </h4>
-        <div id="deckTroopsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+    <!-- ══════════════════════════════════════════════ DECK BUILDER -->
+    <div id="deckBuildingSection" class="panel-card" style="margin-top:30px; width:740px; max-width:95vw; text-align:left;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; border-bottom:1px solid #2a2a2a; padding-bottom:10px;">
+        <h3 style="margin:0; color:#00ced1; letter-spacing:0.04em; font-size:1.1rem;">Your Deck</h3>
+        <span id="deckAutoStatus"></span>
       </div>
 
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
-          Select 2 Buildings: <span id="deckBuildingsCount">0</span>/2
-        </h4>
-        <div id="deckBuildingsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
-      </div>
+      <div id="deckContainer">
+        <!-- LEFT: current picks -->
+        <div id="deckCurrentPanel">
+          <div class="deck-portrait-group">
+            <span class="deck-portrait-label" id="labelTroops" style="color:#555;">Troops 0/4</span>
+            <div class="deck-portrait-row" id="portraitTroops"></div>
+          </div>
+          <div class="deck-portrait-group">
+            <span class="deck-portrait-label" id="labelBuildings" style="color:#555;">Buildings 0/2</span>
+            <div class="deck-portrait-row" id="portraitBuildings"></div>
+          </div>
+          <div class="deck-portrait-group">
+            <span class="deck-portrait-label" id="labelStrategems" style="color:#555;">Strategems 0/2</span>
+            <div class="deck-portrait-row" id="portraitStrategems"></div>
+          </div>
+          <div class="deck-portrait-group">
+            <span class="deck-portrait-label" id="labelHero" style="color:#555;">Hero 0/1</span>
+            <div class="deck-portrait-row" id="portraitHero"></div>
+          </div>
+        </div>
 
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
-          Select 2 Strategems: <span id="deckStrategemsCount">0</span>/2
-        </h4>
-        <div id="deckStrategemsSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
-      </div>
+        <!-- RIGHT: card browser -->
+        <div id="deckBrowserPanel">
+          <div class="browser-tabs">
+            <button class="browser-tab active" data-cat="troops">Troops 0/4</button>
+            <button class="browser-tab" data-cat="buildings">Buildings 0/2</button>
+            <button class="browser-tab" data-cat="strategems">Strategems 0/2</button>
+            <button class="browser-tab" data-cat="hero">Hero 0/1</button>
+          </div>
 
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 5px 0; font-size: 14px; color: #ccc;">
-          Select 1 Hero: <span id="deckHeroCount">0</span>/1
-        </h4>
-        <div id="deckHeroSelection" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+          <div class="browser-pane active" id="paneTroops">
+            <div class="deck-chips" id="deckTroopsSelection"></div>
+            <div class="deck-info-panel" id="infoPanelTroops"><span class="deck-info-placeholder">Select a troop to see details</span></div>
+          </div>
+          <div class="browser-pane" id="paneBuildings">
+            <div class="deck-chips" id="deckBuildingsSelection"></div>
+            <div class="deck-info-panel" id="infoPanelBuildings"><span class="deck-info-placeholder">Select a building to see details</span></div>
+          </div>
+          <div class="browser-pane" id="paneStrategems">
+            <div class="deck-chips" id="deckStrategemsSelection"></div>
+            <div class="deck-info-panel" id="infoPanelStrategems"><span class="deck-info-placeholder">Select a strategem to see details</span></div>
+          </div>
+          <div class="browser-pane" id="paneHero">
+            <div class="deck-chips" id="deckHeroSelection"></div>
+            <div class="deck-info-panel" id="infoPanelHero"><span class="deck-info-placeholder">Select a hero to see details</span></div>
+          </div>
+        </div>
       </div>
-
-      <button id="saveDeckBtn" style="padding: 8px 16px; margin-top: 10px;">Save Deck</button>
-      <div id="deckSaveStatus" style="margin-top: 5px; font-size: 12px; display: none;"></div>
     </div>
 
-    <div id="settingsSection" style="width: 480px; max-width: 95vw;">
-      <h3>Display</h3>
-      <label><input type="checkbox" id="settingShowVision" /> Show vision circles</label>
-      <label><input type="checkbox" id="settingShowRange" /> Show range circles</label>
+    <!-- ══════════════════════════════════════════ HOW TO PLAY MODAL -->
+    <div id="howToPlayOverlay" class="menu-overlay hidden">
+      <div class="modal-box" style="max-width:700px;">
+        <button class="modal-close-btn" id="closeHTP" title="Close">&times;</button>
+        <h2 style="background:linear-gradient(90deg,#f5c518,#fff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">How to Play</h2>
+
+        <div class="htp-tabs">
+          <button class="htp-tab active" data-pane="htpBasics">Basics</button>
+          <button class="htp-tab" data-pane="htpAdvanced">Advanced</button>
+          <button class="htp-tab" data-pane="htpGlossary">Glossary of Cards</button>
+        </div>
+
+        <!-- BASICS -->
+        <div class="htp-pane active" id="htpBasics">
+          <div class="htp-section">
+            <h4>Objective</h4>
+            <p>Control more tiles than your opponent when the clock hits zero. Tiles are claimed passively by your troops and locked down by buildings &mdash; the more ground you hold, the more resources you generate.</p>
+          </div>
+          <div class="htp-section accent-yellow">
+            <h4>Resources</h4>
+            <p><strong style="color:#00ced1;">RP (Resource Points)</strong> &mdash; used to spawn troops and place buildings. Accumulates over time; tile control speeds it up.<br><br>
+            <strong style="color:#ff00ff;">TP (Troop Points)</strong> &mdash; used to cast strategems. Generated by your tiles and Supply Depots.</p>
+          </div>
+          <div class="htp-section accent-green">
+            <h4>Match Phases</h4>
+            <p>Each match runs ~5.5 minutes across three phases:<br><br>
+            <strong>Opening</strong> (100 s) &rarr; <strong>Intermission</strong> (15 s, pick +1 troop &amp; +1 strategem) &rarr; <strong>Assault</strong> (100 s) &rarr; <strong>Intermission</strong> &rarr; <strong>Endgame</strong> (100 s)</p>
+          </div>
+          <div class="htp-section">
+            <h4>Your Deck</h4>
+            <p>Before the match, build a deck: <strong>4 Troops / 2 Buildings / 2 Strategems / 1 Hero</strong>. You can expand it at each Intermission.</p>
+          </div>
+          <div class="htp-section accent-yellow">
+            <h4>Controls</h4>
+            <table class="htp-controls-table">
+              <thead><tr><th>Key</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td>1 &ndash; 6</td><td>Select a troop from your hotkey rail</td></tr>
+                <tr><td>7 &ndash; 0</td><td>Select a strategem</td></tr>
+                <tr><td>, &nbsp;/&nbsp; .</td><td>Select Building 1 / Building 2</td></tr>
+                <tr><td>Click canvas</td><td>Deploy selected troop, building, or strategem</td></tr>
+                <tr><td>W A S D</td><td>Move your hero</td></tr>
+                <tr><td>Space</td><td>Activate hero ability (costs TP)</td></tr>
+                <tr><td>Esc / click again</td><td>Cancel current selection</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ADVANCED -->
+        <div class="htp-pane" id="htpAdvanced">
+          <div class="htp-section">
+            <h4>Tile Influence</h4>
+            <p>Your units claim tiles by depositing influence. A unit <strong>standing on a tile</strong> adds <strong>+0.05 per second</strong>; each cardinal-adjacent tile gains <strong>+0.01/s</strong>. A tile flips ownership when influence reaches <strong>&plusmn;0.5</strong>. Influence never decays on its own &mdash; the enemy must actively overwrite it. A single unit marching through a tile does not flip it; sustained group presence is required.</p>
+          </div>
+          <div class="htp-section accent-yellow">
+            <h4>Resource Caps &amp; Comeback</h4>
+            <p>RP cap rises each phase: <strong>10 (Opening) &rarr; 15 (Assault) &rarr; 20 (Endgame)</strong>. TP cap: <strong>5 &rarr; 7.5 &rarr; 10</strong>. No resources generate during Intermissions. TP has a <strong>comeback mechanic</strong>: the more tiles you lose, the faster your TP regenerates &mdash; up to <strong>2&times; base rate</strong> at full overrun. A losing player can still cast strategems aggressively.</p>
+          </div>
+          <div class="htp-section accent-green">
+            <h4>Chill Stacking (Chill Turret)</h4>
+            <p>Each Chill Turret hit applies <strong>+2 stacks</strong> (cap 80). Every stack slows the target by <strong>1%</strong> (movement and attack speed). At <strong>80 stacks</strong>: the target is fully frozen for <strong>1 second</strong>, then stacks reset to 25. Stacks decay at <strong>1 per 0.4 s</strong>. A single Chill Turret can freeze a Heavy (450 HP) with sustained fire in roughly 8 seconds.</p>
+          </div>
+          <div class="htp-section">
+            <h4>Bunker Garrison</h4>
+            <p>Ranged troops with <strong>range &ge; 2.0 tiles</strong> automatically enter an adjacent friendly Bunker (up to <strong>2 garrison slots</strong>). Garrisoned troops take only <strong>30%</strong> of incoming damage; the Bunker absorbs the other <strong>70%</strong>. A 3rd eligible unit ejects the oldest occupant forward. On Bunker destruction, all occupants exit at <strong>full HP</strong>. Melee troops (Swordsman, Brute, etc.) cannot garrison.</p>
+          </div>
+          <div class="htp-section accent-magenta">
+            <h4>Brute Berserker</h4>
+            <p>On each kill, the Brute immediately heals <strong>+20 HP</strong> and enters a <strong>2-second berserk</strong>: speed <strong>&times;5.0</strong>, attack damage and speed <strong>&times;3.0</strong>. The frenzy stacks multiplicatively with Bannerman inspire and Chrono: Haste. A berserking Brute can chain kills across an entire army before the frenzy expires.</p>
+          </div>
+          <div class="htp-section">
+            <h4>Spawned Units</h4>
+            <p>Some units appear on the battlefield without being in anyone&rsquo;s deck &mdash; created by buildings, troops, or strategems:<br><br>
+            <strong>Skeleton</strong> (HP&nbsp;15 &middot; DMG&nbsp;5) &mdash; spawned by the <strong>War Bones Factory</strong> every 3.5&nbsp;s, plus 3 burst on its destruction; also raised by the <strong>Necromancy</strong> strategem (4 of every 5 enemy deaths in the zone).<br><br>
+            <strong>Zombie</strong> (HP&nbsp;250 &middot; DMG&nbsp;25 &middot; very slow) &mdash; raised by <strong>Necromancy</strong> only, once every 5 enemy deaths in the zone. Tanky and hard to ignore.<br><br>
+            <strong>Commando</strong> (HP&nbsp;80 &middot; DMG&nbsp;3 ranged + splash) &mdash; deployed by the <strong>War Machine</strong> every 7&nbsp;s at its current tile. Builds up fast if the War Machine is left unchecked.</p>
+          </div>
+          <div class="htp-section accent-yellow">
+            <h4>Invisibility</h4>
+            <p>Invisible units cannot be targeted by enemy attacks. Three units use cloaking in different ways:<br><br>
+            <strong>Ninja</strong> &mdash; spawns with a <strong>5-second cloak</strong>. The cloak breaks the moment she attacks (always a melee katana strike first). Unlike other invisible units, Ninja <em>can</em> be revealed and hit by <strong>AoE splash damage</strong> before she attacks.<br><br>
+            <strong>Invisi-Witch</strong> &mdash; projects a <strong>pulsing cloak aura</strong> (2&nbsp;s on / 2.5&nbsp;s off, 2-tile radius) that cloaks herself and all nearby allies. Cloaked units cannot be targeted, but are physically present &mdash; AoE attacks can still hit them.<br><br>
+            <strong>Strategia (Ambush ability)</strong> &mdash; vanishes for <strong>3 seconds</strong>, gaining <strong>&times;1.5 speed</strong> and summoning 1 Archer + 1 Militia at her position. Untargetable but physically present; AoE hits her during the cloak.</p>
+          </div>
+        </div>
+
+        <!-- GLOSSARY -->
+        <div class="htp-pane" id="htpGlossary">
+          <div class="glossary-group-label">Troops</div>
+          <div class="glossary-grid" id="glossaryTroops"></div>
+          <div class="glossary-group-label">Buildings</div>
+          <div class="glossary-grid" id="glossaryBuildings"></div>
+          <div class="glossary-group-label">Strategems</div>
+          <div class="glossary-grid" id="glossaryStrategems"></div>
+          <div class="glossary-group-label">Heroes</div>
+          <div class="glossary-grid" id="glossaryHeroes"></div>
+        </div>
+      </div>
     </div>
 
-    <script src="src/settings.js?v=1"></script>
+    <!-- ════════════════════════════════════════════ SETTINGS MODAL -->
+    <div id="settingsOverlay" class="menu-overlay hidden">
+      <div class="modal-box" style="max-width:420px;">
+        <button class="modal-close-btn" id="closeSettings" title="Close">&times;</button>
+        <h2>&#9881; Settings</h2>
+        <div class="settings-section">
+          <h4>Display</h4>
+          <div class="settings-row">
+            <label for="settingShowVision">Show vision circles</label>
+            <input type="checkbox" id="settingShowVision" class="settings-checkbox" />
+          </div>
+          <div class="settings-row">
+            <label for="settingShowRange">Show range circles</label>
+            <input type="checkbox" id="settingShowRange" class="settings-checkbox" />
+          </div>
+        </div>
+        <div class="settings-section">
+          <h4>Audio</h4>
+          <div class="settings-row">
+            <label>Sound</label>
+            <button id="soundToggleBtn" class="sound-toggle-btn">Sound On</button>
+          </div>
+          <div class="volume-row">
+            <label for="volumeSlider">Volume: <span id="volumeLabel">80%</span></label>
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="src/settings.js?v=2"></script>
     <script src="src/deckSystem.js?v=2"></script>
     <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        window.deckSystem = new DeckSystem();
+    if (!window.deckSystem) window.deckSystem = new DeckSystem();
+    document.addEventListener("DOMContentLoaded", () => {
 
-        const displayNames = {
-          swordsman: "Swordsman", archer: "Archer", heavy: "Heavy", militia: "Militia",
-          settler: "Settler", brute: "Brute", sentinel: "Sentinel", bannerman: "Bannerman",
-          gustKnight: "Gust Knight", grenadier: "Grenadier", invisiWitch: "Invisi-witch", ninja: "Ninja", ogre: "Ogre", warMachine: "War Machine",
-          brickMcStick: "Brick McStick", strategia: "Strategia",
-          wall: "Wall", farm: "Farm", cannon: "Cannon", bunker: "Bunker",
-          supplyDepot: "Supply Depot", warBonesFactory: "War Bones Factory",
-          chillTurret: "Chill Turret", lavaMortar: "Lava Mortar",
-          heal: "Heal Burst", wind: "Wind", necromancy: "Necromancy", ruin: "Ruin",
-          blast: "Blast", chainLightning: "Chain Lightning", gravityField: "Gravity Field",
-          lesserTeleport: "Lesser Teleport", greaterTeleport: "Greater Teleport",
-          chronoHaste: "Chrono: Haste", chronoSlow: "Chrono: Slow", chronoStop: "Chrono: Stop",
+      // ── Card data ────────────────────────────────────────────────
+      const cardData = {
+        // Troops
+        swordsman:    { name:"Swordsman",         img:"images/blueSwordsman.jpg",     desc:"Reliable melee frontliner.",                         stats:"1.5 RP  HP 45  DMG 17  RNG 1  SPD 0.55",                    cost:"1.5 RP" },
+        archer:       { name:"Archer",            img:"images/blueArcher.jpg",        desc:"Ranged fire from behind cover.",                      stats:"1.5 RP  HP 22  DMG 10  RNG 5.5  SPD 0.35",                  cost:"1.5 RP" },
+        heavy:        { name:"Heavy",             img:"images/blueHeavy.jpg",         desc:"Walking tank. Absorbs the front line.",               stats:"3 RP  HP 450  DMG 20  RNG 1  SPD 0.1",                      cost:"3 RP"   },
+        militia:      { name:"Militia",           img:"images/blueMilitia.jpg",       desc:"Cheapest troop. Deploy in mass.",                     stats:"0.5 RP  HP 25  DMG 12  RNG 1  SPD 0.75",                    cost:"0.5 RP" },
+        settler:      { name:"Settler",           img:"images/blueSettler.jpg",       desc:"Captures tiles. Cannot fight.",                      stats:"1.5 RP  HP 20  DMG 0  SPD 2.5",                             cost:"1.5 RP" },
+        brute:        { name:"Brute",             img:"images/blue_brute.png",        desc:"Berserk frenzy on each kill.",                        stats:"3 RP  HP 220  DMG 30  RNG 1  SPD 0.6  Berserk: ×5.0 spd/×3.0 atk for 2s", cost:"3 RP" },
+        sentinel:     { name:"Sentinel",          img:"images/blueSentinel.jpg",      desc:"Rapid ranged fire, low per-shot damage.",             stats:"2.5 RP  HP 60  DMG 3  RNG 4.5  SPD 0.3  Rate: 4/s",         cost:"2.5 RP" },
+        bannerman:    { name:"Bannerman",         img:"images/Blue_Bannerman.png",    desc:"No attacks. Inspires nearby allies.",                 stats:"4 RP  HP 400  SPD 0.1  Inspire: +20% spd/atk/regen in 7-col zone", cost:"4 RP" },
+        gustKnight:   { name:"Gust Knight",       img:"images/blue_gustknight.png",   desc:"Wind cone pushes enemies back on attack.",            stats:"2.5 RP  HP 120  DMG 22 + 11 splash  RNG 1.8  SPD 0.55",     cost:"2.5 RP" },
+        grenadier:    { name:"Grenadier",         img:"images/Blue_Grenadier.png",    desc:"Splash grenades punish clumped enemies.",             stats:"3 RP  HP 55  DMG 25 + 25 splash  RNG 3.5  SPD 0.5",         cost:"3 RP"   },
+        invisiWitch:  { name:"Invisi-Witch",      img:"images/blue_invisiwitch.png",  desc:"Cloaks herself and nearby allies.",                   stats:"4 RP  HP 40  DMG 5  RNG 4  SPD 0.3  Cloak radius 2",        cost:"4 RP"   },
+        ninja:        { name:"Ninja",             img:"images/blue_ninja.png",        desc:"Spawns stealthed. Lethal first strike.",              stats:"4 RP  HP 55  DMG 8 ranged / 20 melee  SPD 2  Spawn cloak: 5s", cost:"4 RP" },
+        ogre:         { name:"Ogre",              img:"images/blue_ogre.png",         desc:"Grabs and throws enemies.",                          stats:"7 RP  HP 350  Throw DMG 30 + 20 splash  RNG 1.2  SPD 0.25  Throw CD: 3.5s", cost:"7 RP" },
+        warMachine:   { name:"War Machine",       img:"images/blue_warmachine.png",   desc:"Dual-weapon siege unit. Spawns Commandos.",          stats:"10 RP  HP 700  Gun DMG 3 (4/s)  Cannon DMG 50 (cd 2.5s)  SPD 0.2", cost:"10 RP" },
+        // Buildings
+        wall:            { name:"Wall",              color:"#888888", desc:"Cheap barrier. Blocks movement.",                  stats:"0.5 RP  HP 100",                                              cost:"0.5 RP" },
+        farm:            { name:"Farm",              color:"#6b8e23", desc:"Generates RP over time.",                          stats:"2 RP  HP 40  +0.1 RP per 5s",                                 cost:"2 RP"   },
+        cannon:          { name:"Cannon",            img:"images/blue_cannon.png",     desc:"Long-range single-target tower.",                stats:"5 RP  HP 105  DMG 50  RNG 7  CD 2.5s",                        cost:"5 RP"   },
+        bunker:          { name:"Bunker",            color:"#4a4a4a", desc:"Garrison shelter for 2 ranged troops.",           stats:"4 RP  HP 400  2 slots  Occupants take 30% of incoming DMG",  cost:"4 RP"   },
+        supplyDepot:     { name:"Supply Depot",      color:"#c08040", desc:"Generates TP over time.",                          stats:"2 RP  HP 40  +0.1 TP per 8s",                                 cost:"2 RP"   },
+        warBonesFactory: { name:"War Bones Factory", color:"#b0b0b0", desc:"Spawns skeletons periodically.",                  stats:"6 RP  HP 100  1 skeleton per 3.5s  3 on destruction",         cost:"6 RP"   },
+        chillTurret:     { name:"Chill Turret",      color:"#a0d8ff", desc:"Stacks freeze on enemies.",                       stats:"4 RP  HP 60  DMG 1 + 2 chill stacks  RNG 7.5  CD 0.2s",      cost:"4 RP"   },
+        lavaMortar:      { name:"Lava Mortar",       color:"#cc3300", desc:"Burning ground patches on impact.",               stats:"6 RP  HP 80  DMG 15 + 6/s DoT  RNG 7.5  CD 5s  Blind spot 1.5", cost:"6 RP" },
+        reaperTurret:    { name:"Reaper Turret",     color:"#3a0010", desc:"Fast fire, gains power from nearby deaths.",       stats:"8 RP  HP 150  DMG 6/shot  RNG 7  CD 0.33s",                  cost:"8 RP"   },
+        // Strategems
+        heal:            { name:"Heal Burst",        color:"#7cff7c", desc:"Area heal over time.",                            stats:"1 TP  CD 5s  Radius 3  Heal 15 init + 5/pulse  Duration 3.5s", cost:"1 TP"  },
+        wind:            { name:"Wind",              color:"#a0e0ff", desc:"Pushes units along a lane.",                      stats:"1 TP  CD 5s  Lane 8×4  Duration 6s  Push 0.35/s",             cost:"1 TP"   },
+        necromancy:      { name:"Necromancy",        color:"#7d4ea0", desc:"Raises the dead as skeleton allies.",             stats:"2 TP  CD 5s  Radius 6  Duration 18s",                          cost:"2 TP"   },
+        ruin:            { name:"Ruin",              color:"#b08060", desc:"Destroys buildings. Delayed.",                    stats:"2.5 TP  CD 5s  Radius 2  Bldg DMG 250  Delay 4s",             cost:"2.5 TP" },
+        blast:           { name:"Blast",             color:"#ffd060", desc:"Instant AoE stun and knockback.",                 stats:"1.5 TP  CD 5s  Instant  Center DMG 40 + stun  Adjacent DMG 15", cost:"1.5 TP" },
+        chainLightning:  { name:"Chain Lightning",   color:"#ff40c0", desc:"Chains between nearby enemies.",                  stats:"2.5 TP  CD 5s  6 strikes  42 troop DMG each  Delay 3s",       cost:"2.5 TP" },
+        gravityField:    { name:"Gravity Field",     color:"#3050a0", desc:"Pulls all units toward center.",                  stats:"2 TP  CD 5s  Radius 4  Duration 4s",                           cost:"2 TP"   },
+        lesserTeleport:  { name:"Lesser Teleport",   color:"#a060ff", desc:"Teleports troops to another tile.",               stats:"2.5 TP  CD 5s  Single tile  Delay 4s",                        cost:"2.5 TP" },
+        greaterTeleport: { name:"Greater Teleport",  color:"#c060ff", desc:"Teleports a whole zone of troops.",               stats:"3.5 TP  CD 5s  Radius 1 zone  Delay 8s",                      cost:"3.5 TP" },
+        chronoHaste:     { name:"Chrono: Haste",     color:"#ffd95a", desc:"Speed and attack boost zone.",                    stats:"2 TP  CD 5s  Radius 2  Duration 5s  ×2.0 spd/×1.5 atk",      cost:"2 TP"   },
+        chronoSlow:      { name:"Chrono: Slow",      color:"#60c0ff", desc:"Slows enemy zone.",                               stats:"2.5 TP  CD 5s  Radius 3  Duration 8s  0.4× spd/0.6× atk",    cost:"2.5 TP" },
+        chronoStop:      { name:"Chrono: Stop",      color:"#c060ff", desc:"Repeated stun pulses in small area.",             stats:"3 TP  CD 5s  Radius 1.5  Duration 4s  Stun 0.5s per pulse",   cost:"3 TP"   },
+        // Heroes
+        brickMcStick: { name:"Brick McStick", img:"images/BrickMcStick_Blue.png", desc:"Summoning Strike on ability.",  stats:"Ability: 1.5 TP  CD 10s  Radius 1  AoE DMG 60  Heal 50 HP  Summons 3 swords", cost:"1.5 TP ability" },
+        strategia:    { name:"Strategia",     img:"images/Strategia_Blue.png",    desc:"Ambush summons on ability.",    stats:"Ability: 1.5 TP  CD 10s  Haste ×1.5  Summons 1 archer + 1 militia",            cost:"1.5 TP ability" },
+      };
+
+      // ── Category config ──────────────────────────────────────────
+      const catCfg = {
+        troops:    { container:"deckTroopsSelection",    infoPanel:"infoPanelTroops",    portraitRow:"portraitTroops",    label:"labelTroops",    pane:"paneTroops",    limit:4, accent:"#00ced1" },
+        buildings: { container:"deckBuildingsSelection", infoPanel:"infoPanelBuildings", portraitRow:"portraitBuildings", label:"labelBuildings", pane:"paneBuildings", limit:2, accent:"#4caf50" },
+        strategems:{ container:"deckStrategemsSelection",infoPanel:"infoPanelStrategems",portraitRow:"portraitStrategems",label:"labelStrategems",pane:"paneStrategems",limit:2, accent:"#cc44ff" },
+        hero:      { container:"deckHeroSelection",      infoPanel:"infoPanelHero",      portraitRow:"portraitHero",      label:"labelHero",      pane:"paneHero",      limit:1, accent:"#f5c518" },
+      };
+
+      // ── Utilities ────────────────────────────────────────────────
+      function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+      function getSelectedKeys(containerId) {
+        return [...document.querySelectorAll(`#${containerId} .selected`)].map(b => b.dataset.key);
+      }
+
+      function makeThumb(key) {
+        const d = cardData[key];
+        if (!d) return null;
+        if (d.img) {
+          const img = document.createElement("img");
+          img.src = d.img; img.className = "deck-chip-img"; img.alt = d.name;
+          return img;
+        }
+        const c = document.createElement("span");
+        c.className = "deck-chip-circle"; c.style.background = d.color || "#555";
+        return c;
+      }
+
+      function makeInfoThumb(key) {
+        const d = cardData[key];
+        if (!d) return null;
+        if (d.img) {
+          const img = document.createElement("img");
+          img.src = d.img; img.className = "deck-info-img"; img.alt = d.name;
+          return img;
+        }
+        const c = document.createElement("div");
+        c.className = "deck-info-circle"; c.style.background = d.color || "#555";
+        return c;
+      }
+
+      // ── Info panel ───────────────────────────────────────────────
+      function updateInfoPanel(panelId, key) {
+        const panel = document.getElementById(panelId);
+        if (!panel) return;
+        panel.innerHTML = "";
+        if (!key || !cardData[key]) {
+          panel.innerHTML = '<span class="deck-info-placeholder">Select an item to see details</span>';
+          return;
+        }
+        const d = cardData[key];
+        const thumb = makeInfoThumb(key);
+        if (thumb) panel.appendChild(thumb);
+        const text = document.createElement("div");
+        text.className = "deck-info-text";
+        text.innerHTML =
+          `<div class="deck-info-name">${d.name}</div>` +
+          `<div class="deck-info-desc">${d.desc}</div>` +
+          `<div class="deck-info-stats">${d.stats || d.cost}</div>`;
+        panel.appendChild(text);
+      }
+
+      // ── Auto-save ────────────────────────────────────────────────
+      function saveCurrentDeck() {
+        const deck = {
+          troops:    getSelectedKeys("deckTroopsSelection"),
+          buildings: getSelectedKeys("deckBuildingsSelection"),
+          strategems:getSelectedKeys("deckStrategemsSelection"),
+          hero:      getSelectedKeys("deckHeroSelection")[0] || null,
         };
-
-        const savedDeck = window.deckSystem.getPlayerDeck("player1", false);
-
-        function createButtons(container, items, category, limit, countSpanId) {
-          if (!container) return;
-          const countSpan = document.getElementById(countSpanId);
-          container.innerHTML = "";
-
-          items.forEach((key) => {
-            const btn = document.createElement("button");
-            btn.className = "deck-selection-btn";
-            btn.textContent = displayNames[key] || key;
-            btn.dataset.key = key;
-
-            const sel = savedDeck[category];
-            const isSaved = Array.isArray(sel) ? sel.includes(key) : sel === key;
-            if (isSaved) btn.classList.add("selected");
-
-            btn.addEventListener("click", () => {
-              const isSelected = btn.classList.contains("selected");
-              const currentCount = container.querySelectorAll(".selected").length;
-              if (isSelected) {
-                btn.classList.remove("selected");
-              } else if (currentCount < limit) {
-                btn.classList.add("selected");
-              }
-              if (countSpan) countSpan.textContent = container.querySelectorAll(".selected").length;
-            });
-
-            container.appendChild(btn);
-          });
-
-          if (countSpan) countSpan.textContent = container.querySelectorAll(".selected").length;
+        const ok = window.deckSystem.setPlayerDeck("player1", deck);
+        if (ok) {
+          const status = document.getElementById("deckAutoStatus");
+          status.textContent = "Saved ✓";
+          status.classList.add("visible");
+          clearTimeout(window._saveTimer);
+          window._saveTimer = setTimeout(() => status.classList.remove("visible"), 1600);
         }
+      }
 
-        createButtons(document.getElementById("deckTroopsSelection"), window.deckSystem.getAvailableTroops(), "troops", 4, "deckTroopsCount");
-        createButtons(document.getElementById("deckBuildingsSelection"), window.deckSystem.getAvailableBuildings(), "buildings", 2, "deckBuildingsCount");
-        createButtons(document.getElementById("deckStrategemsSelection"), window.deckSystem.getAvailableStrategems(), "strategems", 2, "deckStrategemsCount");
-        createButtons(document.getElementById("deckHeroSelection"), window.deckSystem.getAvailableHeroes(), "hero", 1, "deckHeroCount");
+      // ── Portrait panel ───────────────────────────────────────────
+      function renderPortraits(catKey) {
+        const cfg = catCfg[catKey];
+        const selected = getSelectedKeys(cfg.container);
+        const row = document.getElementById(cfg.portraitRow);
+        const labelEl = document.getElementById(cfg.label);
+        if (!row) return;
+        row.innerHTML = "";
 
-        const saveBtn = document.getElementById("saveDeckBtn");
-        const saveStatus = document.getElementById("deckSaveStatus");
-        if (saveBtn) {
-          saveBtn.addEventListener("click", () => {
-            const heroBtns = document.getElementById("deckHeroSelection").querySelectorAll(".selected");
-            const deck = {
-              troops: [...document.getElementById("deckTroopsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
-              buildings: [...document.getElementById("deckBuildingsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
-              strategems: [...document.getElementById("deckStrategemsSelection").querySelectorAll(".selected")].map((b) => b.dataset.key),
-              hero: heroBtns.length > 0 ? heroBtns[0].dataset.key : null,
-            };
-            const ok = window.deckSystem.setPlayerDeck("player1", deck);
-            if (saveStatus) {
-              saveStatus.textContent = ok ? "Deck saved!" : "Invalid deck — need 4 troops, 2 buildings, 2 strategems, 1 hero.";
-              saveStatus.style.color = ok ? "#4caf50" : "#f44336";
-              saveStatus.style.display = "block";
-              setTimeout(() => (saveStatus.style.display = "none"), 2500);
+        for (let i = 0; i < cfg.limit; i++) {
+          const key = selected[i] || null;
+          const d = key ? cardData[key] : null;
+          const slot = document.createElement("div");
+          slot.className = "deck-portrait-slot";
+
+          const btn = document.createElement("button");
+          btn.className = "deck-portrait-btn" + (key ? " filled" : "");
+          if (key) {
+            btn.style.borderColor = cfg.accent;
+            if (d && d.img) {
+              const img = document.createElement("img");
+              img.src = d.img; img.alt = d.name;
+              btn.appendChild(img);
+            } else if (d && d.color) {
+              btn.style.background = d.color;
             }
-          });
+            btn.title = `Remove ${d ? d.name : key}`;
+            const k = key, cat = catKey;
+            btn.addEventListener("click", () => deselectCard(cat, k));
+          } else {
+            const plus = document.createElement("span");
+            plus.style.cssText = "color:#333; font-size:16px; font-weight:bold; line-height:1;";
+            plus.textContent = "+";
+            btn.appendChild(plus);
+          }
+
+          const nameEl = document.createElement("div");
+          nameEl.className = "deck-portrait-name";
+          nameEl.textContent = d ? d.name : "";
+          slot.appendChild(btn);
+          slot.appendChild(nameEl);
+          row.appendChild(slot);
         }
+
+        if (labelEl) {
+          const count = selected.length;
+          const display = catKey === "hero" ? "Hero" : capitalize(catKey);
+          labelEl.textContent = `${display} ${count}/${cfg.limit}`;
+          labelEl.style.color = count === cfg.limit ? cfg.accent : "#555";
+        }
+      }
+
+      function deselectCard(catKey, key) {
+        const cfg = catCfg[catKey];
+        const chip = document.querySelector(`#${cfg.container} [data-key="${key}"]`);
+        if (chip) chip.classList.remove("selected");
+        updateInfoPanel(cfg.infoPanel, null);
+        renderPortraits(catKey);
+        updateBrowserTab(catKey);
+        saveCurrentDeck();
+      }
+
+      // ── Browser tabs ─────────────────────────────────────────────
+      function updateBrowserTab(catKey) {
+        const cfg = catCfg[catKey];
+        const tab = document.querySelector(`.browser-tab[data-cat="${catKey}"]`);
+        if (!tab) return;
+        const count = getSelectedKeys(cfg.container).length;
+        const complete = count === cfg.limit;
+        const display = catKey === "hero" ? "Hero" : capitalize(catKey);
+        tab.textContent = complete ? `${display} ✓` : `${display} ${count}/${cfg.limit}`;
+        tab.classList.toggle("tab-complete", complete);
+      }
+
+      // ── Chip creation ────────────────────────────────────────────
+      const savedDeck = window.deckSystem.getPlayerDeck("player1", false);
+
+      function createChips(catKey, items) {
+        const cfg = catCfg[catKey];
+        const container = document.getElementById(cfg.container);
+        if (!container) return;
+        container.innerHTML = "";
+
+        items.forEach(key => {
+          const d = cardData[key];
+          const chip = document.createElement("button");
+          chip.className = "deck-chip"; chip.dataset.key = key;
+
+          const thumb = makeThumb(key);
+          if (thumb) chip.appendChild(thumb);
+
+          const lbl = document.createElement("span");
+          lbl.textContent = d ? d.name : key;
+          chip.appendChild(lbl);
+
+          // Restore saved selection
+          const sel = catKey === "hero" ? savedDeck.hero : savedDeck[catKey];
+          const isSaved = Array.isArray(sel) ? sel.includes(key) : sel === key;
+          if (isSaved) chip.classList.add("selected");
+
+          chip.addEventListener("click", () => {
+            const isSelected = chip.classList.contains("selected");
+            const currentCount = container.querySelectorAll(".selected").length;
+            if (isSelected) {
+              chip.classList.remove("selected");
+              updateInfoPanel(cfg.infoPanel, null);
+            } else if (currentCount < cfg.limit) {
+              chip.classList.add("selected");
+              updateInfoPanel(cfg.infoPanel, key);
+            } else {
+              // Limit hit — show info anyway
+              updateInfoPanel(cfg.infoPanel, key);
+              return;
+            }
+            renderPortraits(catKey);
+            updateBrowserTab(catKey);
+            saveCurrentDeck();
+          });
+
+          container.appendChild(chip);
+        });
+
+        renderPortraits(catKey);
+        updateBrowserTab(catKey);
+      }
+
+      // Build all chip sections
+      createChips("troops",    window.deckSystem.getAvailableTroops());
+      createChips("buildings", window.deckSystem.getAvailableBuildings());
+      createChips("strategems",window.deckSystem.getAvailableStrategems());
+      createChips("hero",      window.deckSystem.getAvailableHeroes());
+
+      // Browser tab switching
+      document.querySelectorAll(".browser-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".browser-tab").forEach(t => t.classList.remove("active"));
+          document.querySelectorAll(".browser-pane").forEach(p => p.classList.remove("active"));
+          tab.classList.add("active");
+          const paneId = "pane" + capitalize(tab.dataset.cat);
+          const pane = document.getElementById(paneId);
+          if (pane) pane.classList.add("active");
+        });
       });
-    </script>
 
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const btnPvPRoomCode = document.getElementById("btnPvPRoomCode");
-        if (btnPvPRoomCode) {
-          btnPvPRoomCode.addEventListener("click", (e) => {
-            e.preventDefault();
-            window.location.href = "game.html?mode=pvp&type=roomcode";
-          });
-        }
-        const btnPvPOpen = document.getElementById("btnPvPOpen");
-        if (btnPvPOpen) {
-          btnPvPOpen.addEventListener("click", (e) => {
-            e.preventDefault();
-            window.location.href = "game.html?mode=pvp&type=matchmaking";
-          });
-        }
-        const btnSandbox = document.getElementById("btnSandbox");
-        if (btnSandbox) {
-          btnSandbox.addEventListener("click", (e) => {
-            e.preventDefault();
-            window.location.href = "game.html?mode=sandbox";
-          });
-        }
-        const btnPvC = document.getElementById("btnPvC");
-        if (btnPvC) {
-          btnPvC.addEventListener("click", (e) => {
-            e.preventDefault();
-            window.location.href = "game.html?mode=pvc";
-          });
-        }
+      // ── Navigation ───────────────────────────────────────────────
+      document.getElementById("btnPvPRoomCode").addEventListener("click", () => { window.location.href = "game.html?mode=pvp&type=roomcode"; });
+      document.getElementById("btnPvPOpen").addEventListener("click",     () => { window.location.href = "game.html?mode=pvp&type=matchmaking"; });
+      document.getElementById("btnSandbox").addEventListener("click",     () => { window.location.href = "game.html?mode=sandbox"; });
+      document.getElementById("btnPvC").addEventListener("click",         () => { window.location.href = "game.html?mode=pvc"; });
 
-        const vis = document.getElementById("settingShowVision");
-        const rng = document.getElementById("settingShowRange");
-        if (vis && window.userSettings) {
-          vis.checked = window.userSettings.getShowVision();
-          vis.addEventListener("change", () => window.userSettings.setShowVision(vis.checked));
-        }
-        if (rng && window.userSettings) {
-          rng.checked = window.userSettings.getShowRange();
-          rng.addEventListener("change", () => window.userSettings.setShowRange(rng.checked));
-        }
+      // ── Modal open/close ─────────────────────────────────────────
+      function openOverlay(id)  { document.getElementById(id).classList.remove("hidden"); }
+      function closeOverlay(id) { document.getElementById(id).classList.add("hidden"); }
+
+      document.getElementById("btnHowToPlay").addEventListener("click", () => openOverlay("howToPlayOverlay"));
+      document.getElementById("btnSettings").addEventListener("click",  () => openOverlay("settingsOverlay"));
+      document.getElementById("closeHTP").addEventListener("click",     () => closeOverlay("howToPlayOverlay"));
+      document.getElementById("closeSettings").addEventListener("click",() => closeOverlay("settingsOverlay"));
+      document.getElementById("howToPlayOverlay").addEventListener("click", e => { if (e.target === e.currentTarget) closeOverlay("howToPlayOverlay"); });
+      document.getElementById("settingsOverlay").addEventListener("click",  e => { if (e.target === e.currentTarget) closeOverlay("settingsOverlay"); });
+      document.addEventListener("keydown", e => {
+        if (e.key === "Escape") { closeOverlay("howToPlayOverlay"); closeOverlay("settingsOverlay"); }
       });
-    </script>
 
+      // ── HTP tabs ─────────────────────────────────────────────────
+      document.querySelectorAll(".htp-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".htp-tab").forEach(t => t.classList.remove("active"));
+          document.querySelectorAll(".htp-pane").forEach(p => p.classList.remove("active"));
+          tab.classList.add("active");
+          const pane = document.getElementById(tab.dataset.pane);
+          if (pane) pane.classList.add("active");
+        });
+      });
+
+      // ── Glossary of Cards ────────────────────────────────────────
+      function buildGlossarySection(containerId, keys) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        keys.forEach(key => {
+          const d = cardData[key];
+          if (!d) return;
+          const card = document.createElement("div");
+          card.className = "glossary-card";
+
+          if (d.img) {
+            const img = document.createElement("img");
+            img.src = d.img; img.className = "glossary-card-img"; img.alt = d.name;
+            card.appendChild(img);
+          } else {
+            const circle = document.createElement("span");
+            circle.className = "glossary-color-circle";
+            circle.style.background = d.color || "#555";
+            card.appendChild(circle);
+          }
+
+          const name = document.createElement("div");
+          name.className = "glossary-card-name";
+          name.textContent = d.name;
+          card.appendChild(name);
+
+          const desc = document.createElement("div");
+          desc.className = "glossary-card-desc";
+          desc.textContent = d.desc;
+          card.appendChild(desc);
+
+          if (d.stats) {
+            const stats = document.createElement("div");
+            stats.className = "glossary-card-stats";
+            stats.textContent = d.stats;
+            card.appendChild(stats);
+          }
+
+          const costBadge = document.createElement("span");
+          costBadge.className = "glossary-card-cost " + (d.cost.includes("TP") ? "cost-tp" : "cost-rp");
+          costBadge.textContent = d.cost;
+          card.appendChild(costBadge);
+
+          container.appendChild(card);
+        });
+      }
+
+      buildGlossarySection("glossaryTroops",    window.deckSystem.getAvailableTroops());
+      buildGlossarySection("glossaryBuildings",  window.deckSystem.getAvailableBuildings());
+      buildGlossarySection("glossaryStrategems", window.deckSystem.getAvailableStrategems());
+      buildGlossarySection("glossaryHeroes",     window.deckSystem.getAvailableHeroes());
+
+      // ── Settings wiring ──────────────────────────────────────────
+      const visChk    = document.getElementById("settingShowVision");
+      const rngChk    = document.getElementById("settingShowRange");
+      const soundBtn  = document.getElementById("soundToggleBtn");
+      const volSlider = document.getElementById("volumeSlider");
+      const volLabel  = document.getElementById("volumeLabel");
+
+      if (window.userSettings) {
+        visChk.checked = window.userSettings.getShowVision();
+        rngChk.checked = window.userSettings.getShowRange();
+        const audioOn = window.userSettings.getAudioEnabled();
+        soundBtn.textContent = audioOn ? "Sound On" : "Sound Off";
+        soundBtn.classList.toggle("off", !audioOn);
+        const vol = Math.round(window.userSettings.getAudioVolume() * 100);
+        volSlider.value = vol;
+        volLabel.textContent = vol + "%";
+      }
+
+      visChk.addEventListener("change", () => window.userSettings.setShowVision(visChk.checked));
+      rngChk.addEventListener("change", () => window.userSettings.setShowRange(rngChk.checked));
+      soundBtn.addEventListener("click", () => {
+        const nowOn = !window.userSettings.getAudioEnabled();
+        window.userSettings.setAudioEnabled(nowOn);
+        soundBtn.textContent = nowOn ? "Sound On" : "Sound Off";
+        soundBtn.classList.toggle("off", !nowOn);
+      });
+      volSlider.addEventListener("input", () => {
+        const pct = parseInt(volSlider.value, 10);
+        volLabel.textContent = pct + "%";
+        window.userSettings.setAudioVolume(pct / 100);
+      });
+    });
+    </script>
   </body>
 </html>

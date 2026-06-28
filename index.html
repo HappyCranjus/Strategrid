@@ -2,84 +2,163 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Strategrid - Landing</title>
+    <title>Strategrid</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111'/><rect x='2' y='2' width='13' height='13' fill='%233399ff'/><rect x='17' y='2' width='13' height='13' fill='%23ff4444'/><rect x='2' y='17' width='13' height='13' fill='%23ff4444'/><rect x='17' y='17' width='13' height='13' fill='%233399ff'/></svg>">
     <style>
-      /* Basic reset and styling */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body,
-      html {
-        width: 100%;
-        height: 100%;
-        background-color: #111; /* Dark background */
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body, html {
+        width: 100%; height: 100%;
+        background-color: #111;
+        background-image:
+          repeating-linear-gradient(0deg, transparent, transparent 39px, #181818 39px, #181818 40px),
+          repeating-linear-gradient(90deg, transparent, transparent 39px, #181818 39px, #181818 40px);
         display: flex;
         justify-content: center;
         align-items: center;
-        font-family: sans-serif;
+        font-family: 'Barlow', sans-serif;
         color: #eee;
       }
+
       #splashContainer {
+        max-width: 520px;
+        padding: 48px 40px;
         text-align: center;
       }
-      .hidden {
-        display: none;
-      }
+
+      /* All splash elements start invisible and occupy space so there's no layout shift */
       .splashText {
-        margin: 10px 0;
-        font-weight: normal;
+        opacity: 0;
       }
-      button {
-        padding: 10px 20px;
-        font-size: 1rem;
-        cursor: pointer;
-        background-color: #4caf50;
+      .splashText.show {
+        animation: fadeInUp 0.55s ease forwards;
+      }
+      .splashText.hiding {
+        animation: fadeOutUp 0.35s ease forwards;
+      }
+
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: translateY(0);    }
+      }
+      @keyframes fadeOutUp {
+        from { opacity: 1; transform: translateY(0);     }
+        to   { opacity: 0; transform: translateY(-10px); }
+      }
+
+      #loadingText {
+        font-size: 1.15rem;
+        font-weight: 400;
+        color: #666;
+        letter-spacing: 0.06em;
+        margin-bottom: 0;
+      }
+
+      #productionText {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #00ced1;
+        letter-spacing: 0.1em;
+      }
+
+      #titleText {
+        font-size: 3.5rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background: linear-gradient(90deg, #00ced1 0%, #cccccc 50%, #ff4040 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0;
+        line-height: 1.1;
+      }
+
+      #titleDivider {
+        width: 72px;
+        height: 2px;
+        background: linear-gradient(90deg, #00ced1, #ff4040);
+        margin: 16px auto 0;
+      }
+
+      #pitchText {
+        font-size: 1.3rem;
+        color: #999;
+        margin: 20px 0 32px;
+        line-height: 1.65;
+        font-weight: 400;
+      }
+
+      #launchButton {
+        padding: 14px 36px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        background: #4caf50;
         border: none;
+        border-radius: 6px;
         color: #fff;
+        cursor: pointer;
+        font-family: 'Barlow', sans-serif;
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+      }
+      #launchButton:hover {
+        background: #388e3c;
+        box-shadow: 0 0 18px rgba(76, 175, 80, 0.45);
       }
     </style>
   </head>
   <body>
     <div id="splashContainer">
-      <!-- These elements start out hidden via JavaScript or immediate styling -->
-      <h1 id="loadingText" class="splashText hidden">
-        Loading Strategrid v0.3.1
-      </h1>
-      <h2 id="productionText" class="splashText hidden">
-        A HappyCranjus Production
-      </h2>
-      <h2 id="titleText" class="splashText hidden">
-        Strategrid: GIVE ME THE JUICE
-      </h2>
-      <button id="launchButton" class="hidden">Launch Strategrid v0.3.1</button>
+      <h1 id="loadingText" class="splashText">Loading Strategrid v1.0</h1>
+      <h2 id="productionText" class="splashText">A HappyCranjus Production</h2>
+      <h2 id="titleText" class="splashText">Strategrid</h2>
+      <div id="titleDivider" class="splashText"></div>
+      <p id="pitchText" class="splashText">
+        Real-time territory strategy for two players.<br>
+        Build your deck. Claim the grid. Destroy the enemy base.
+      </p>
+      <button id="launchButton" class="splashText">Launch Strategrid v1.0</button>
     </div>
 
     <script>
       window.addEventListener("load", () => {
-        const loadingText = document.getElementById("loadingText");
+        const loadingText    = document.getElementById("loadingText");
         const productionText = document.getElementById("productionText");
-        const titleText = document.getElementById("titleText");
-        const launchButton = document.getElementById("launchButton");
+        const titleText      = document.getElementById("titleText");
+        const titleDivider   = document.getElementById("titleDivider");
+        const pitchText      = document.getElementById("pitchText");
+        const launchButton   = document.getElementById("launchButton");
 
-        // Show "Loading Strategrid v0.1..." for 2 seconds
-        loadingText.classList.remove("hidden");
+        function show(el) {
+          el.classList.remove("hiding");
+          el.classList.add("show");
+        }
+        function hide(el, cb) {
+          el.classList.add("hiding");
+          el.classList.remove("show");
+          setTimeout(cb, 380);
+        }
+
+        show(loadingText);
+
         setTimeout(() => {
-          loadingText.classList.add("hidden");
+          hide(loadingText, () => {
+            show(productionText);
 
-          // Now show "A HappyCranjus Production" for 2 seconds
-          productionText.classList.remove("hidden");
-          setTimeout(() => {
-            productionText.classList.add("hidden");
-
-            // Finally, show "Strategrid: Humble Beginnings" and the button (stays visible)
-            titleText.classList.remove("hidden");
-            launchButton.classList.remove("hidden");
-          }, 1000);
+            setTimeout(() => {
+              hide(productionText, () => {
+                show(titleText);
+                show(titleDivider);
+                show(pitchText);
+                show(launchButton);
+              });
+            }, 1200);
+          });
         }, 2500);
 
-        // When user clicks "Launch", go to your game page (index.html)
         launchButton.addEventListener("click", () => {
           window.location.href = "menu.html";
         });

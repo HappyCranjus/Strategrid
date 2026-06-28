@@ -144,7 +144,7 @@ class StrategemSystem {
     const r = def.radius != null ? def.radius : 1;
     for (const t of gs.troops) {
       if (t.owner === hero.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const tc = Math.floor(t.col);
       const tr = Math.floor(t.row);
       if (Math.abs(tc - hc) > r || Math.abs(tr - hr) > r) continue;
@@ -274,7 +274,7 @@ class StrategemSystem {
   _healInRadius(s, def, amount) {
     for (const t of this.gameState.troops) {
       if (t.owner !== s.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > def.radius) continue;
@@ -289,7 +289,7 @@ class StrategemSystem {
     const px = -s.dirRow;
     const py = s.dirCol;
     for (const t of this.gameState.troops) {
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const rx = t.col - s.col;
       const ry = t.row - s.row;
       const along = rx * s.dirCol + ry * s.dirRow;
@@ -314,7 +314,7 @@ class StrategemSystem {
 
     for (const t of gs.troops) {
       if (t.owner === s.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -380,7 +380,7 @@ class StrategemSystem {
     for (const t of gs.troops) {
       if (t.owner === s.owner) continue;
       if (!t.isHero) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -419,8 +419,8 @@ class StrategemSystem {
       let bestD = Infinity;
       for (const t of gs.troops) {
         if (t.owner !== enemyOwner) continue;
-        // Ninja cloak is NOT phase-shifted — Chain Lightning hits and reveals her.
-        if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+        // Cloaked units (cloakActive) are physically present — Chain Lightning hits them.
+        if ((t.invisible && !t.cloakActive) || t.garrisonedIn || t.inFlight) continue;
         if (hitSet.has(t)) continue;
         const dx = t.col - fromCol;
         const dy = t.row - fromRow;
@@ -493,7 +493,7 @@ class StrategemSystem {
 
     for (const t of gs.troops) {
       if (t.owner !== enemyOwner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       const d = Math.sqrt(dx * dx + dy * dy);
@@ -605,7 +605,7 @@ class StrategemSystem {
     const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
     for (const t of gs.troops) {
       if (t.owner !== s.owner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -635,7 +635,7 @@ class StrategemSystem {
     const enemyOwner = s.owner === "player1" ? "player2" : "player1";
     for (const t of gs.troops) {
       if (t.owner !== enemyOwner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -669,7 +669,7 @@ class StrategemSystem {
 
     for (const t of gs.troops) {
       if (t.owner !== enemyOwner) continue;
-      if (t.invisible || t.garrisonedIn) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -696,7 +696,7 @@ class StrategemSystem {
     const dps    = s.dps    != null ? s.dps    : def.dps;
     for (const t of this.gameState.troops) {
       if (t.owner === s.owner) continue;
-      if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn || t.inFlight) continue;
       const dx = t.col - s.col;
       const dy = t.row - s.row;
       if (Math.sqrt(dx * dx + dy * dy) > radius) continue;
@@ -711,7 +711,7 @@ class StrategemSystem {
     const centerRow = s.row;
     for (const t of this.gameState.troops) {
       if (t.owner === s.owner) continue;
-      if ((t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+      if ((t.invisible && !t.cloakActive) || t.garrisonedIn || t.inFlight) continue;
       const tc = Math.floor(t.col);
       const tr = Math.floor(t.row);
       if (tc === centerCol && tr === centerRow) {

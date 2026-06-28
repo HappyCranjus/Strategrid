@@ -38,9 +38,10 @@ function applyDamage(target, raw, opts) {
     target.cloakActive  = false;
     target.cloakedUntil = 0;
   }
-  // Teleporting / Ambush-cloaked troops are out of phase with the battlefield
-  // — nothing reaches them while they're invisible.
-  if (target.invisible) return;
+  // Mid-teleport troops are out of phase with the battlefield — nothing reaches
+  // them. Cloaked units (cloakActive=true) are physically present and can be
+  // hit by AoE; only truly phase-shifted (teleporting) units are immune.
+  if (target.invisible && !target.cloakActive) return;
 
   // Bunker garrison damage shield: occupants absorb a share of the incoming
   // damage; the bunker absorbs the rest. The recursive applyDamage call lets
@@ -343,8 +344,9 @@ class TroopSystem {
             const impactRow = target.row + ((target.height || 0) / 2);
             for (const t of gs.troops) {
               if (t.owner !== enemyOwner) continue;
-              // Ninjas in cloak are NOT phase-shifted — splash hits and reveals them.
-              if (t.hp <= 0 || (t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+              // Cloaked units (cloakActive) are physically present — splash hits them.
+              // Only mid-teleport (invisible && !cloakActive) units are skipped.
+              if (t.hp <= 0 || (t.invisible && !t.cloakActive) || t.garrisonedIn || t.inFlight) continue;
               const dx = t.col - impactCol;
               const dy = t.row - impactRow;
               if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(t, splash, { attackerCol: impactCol, attackerRow: impactRow });
@@ -432,7 +434,7 @@ class TroopSystem {
             const ox = troop.col + 0.5, oy = troop.row + 0.5;
             for (const t of gs.troops) {
               if (t === troop || t.owner === troop.owner) continue;
-              if (t.hp <= 0 || (t.invisible && t.type !== "ninja") || t.garrisonedIn || t.inFlight) continue;
+              if (t.hp <= 0 || (t.invisible && !t.cloakActive) || t.garrisonedIn || t.inFlight) continue;
               const rx = t.col - troop.col;
               const ry = t.row - troop.row;
               const along  = rx * dx + ry * dy;
@@ -635,7 +637,7 @@ class TroopSystem {
             if (v === t) continue;
             if (v.owner !== enemyOwner) continue;
             if (v.hp <= 0) continue;
-            if ((v.invisible && v.type !== "ninja") || v.garrisonedIn || v.inFlight) continue;
+            if ((v.invisible && !v.cloakActive) || v.garrisonedIn || v.inFlight) continue;
             const dx = v.col - t.col;
             const dy = v.row - t.row;
             if (Math.sqrt(dx * dx + dy * dy) <= splashR) applyDamage(v, splashDmg, { attackerCol: t.col, attackerRow: t.row });

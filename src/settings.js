@@ -1,6 +1,6 @@
 (function () {
   const KEY = "userSettings";
-  const DEFAULTS = { showVision: true, showRange: true };
+  const DEFAULTS = { showVision: true, showRange: true, audioEnabled: true, audioVolume: 0.8 };
 
   function _read() {
     try {
@@ -16,9 +16,13 @@
   }
 
   window.userSettings = {
-    getShowVision() { return _read().showVision; },
-    setShowVision(v) { const s = _read(); s.showVision = !!v; _write(s); },
-    getShowRange()  { return _read().showRange; },
-    setShowRange(v)  { const s = _read(); s.showRange  = !!v; _write(s); },
+    getShowVision()    { return _read().showVision; },
+    setShowVision(v)   { const s = _read(); s.showVision = !!v; _write(s); },
+    getShowRange()     { return _read().showRange; },
+    setShowRange(v)    { const s = _read(); s.showRange  = !!v; _write(s); },
+    getAudioEnabled()  { return _read().audioEnabled; },
+    setAudioEnabled(v) { const s = _read(); s.audioEnabled = !!v; _write(s); },
+    getAudioVolume()   { return _read().audioVolume; },
+    setAudioVolume(v)  { const s = _read(); s.audioVolume = Math.max(0, Math.min(1, Number(v))); _write(s); },
   };
 })();
