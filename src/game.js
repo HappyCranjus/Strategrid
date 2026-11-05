@@ -64,44 +64,41 @@ function setupMultiplayer(networkingSystem, gameState, gameLoop, pvpType) {
   }
   overlay.style.display = "flex";
 
+  const doStart = () => {
+    overlay.style.display = "none";
+    gameState.paused = false;
+    gameState.initialize();
+    window.gameSetupResult.buildingSystem.placeInitialTurrets();
+    // Create the lockstep system — this replaces the old 500ms state sync.
+    window.lockstepSystem = new LockstepSystem(window.gameSetupResult, networkingSystem);
+    installPhaseTimerHUD();
+    installIntermissionOverlay(networkingSystem.getLocalPlayerId());
+    gameLoop.start();
+    setTimeout(() => buildHotkeyRails(networkingSystem), 200);
+  };
+
+  // Joiner calls doStart() when it receives the gameStart message from host.
+  networkingSystem.onGameStart = doStart;
+
   window.onMultiplayerConnected = () => {
-    console.log("[Multiplayer] Connected — starting game");
+    console.log("[Multiplayer] Connected — waiting for game start");
     statusText.textContent = "Connected! Starting game…";
 
-    if (networkingSystem.matchmakingTimers) {
-      const t = networkingSystem.matchmakingTimers;
-      if (t.timerInterval)     { clearInterval(t.timerInterval);     t.timerInterval = null; }
-      if (t.roomCodeInterval)  { clearInterval(t.roomCodeInterval);  t.roomCodeInterval = null; }
-      if (t.heartbeatInterval) { clearInterval(t.heartbeatInterval); t.heartbeatInterval = null; }
-    }
-
-    const doStart = () => {
-      overlay.style.display = "none";
-      gameState.paused = false;
-      gameState.initialize();
-      window.gameSetupResult.buildingSystem.placeInitialTurrets();
-      if (networkingSystem.isHost) networkingSystem.startStateSync();
-      installPhaseTimerHUD();
-      installIntermissionOverlay(networkingSystem.getLocalPlayerId());
-      gameLoop.start();
-      setTimeout(() => buildHotkeyRails(networkingSystem), 200);
-    };
-
     if (networkingSystem.isHost) {
-      // Wait until client's deck is received so _spawnHeroes picks the right hero.
-      // Falls through after 3s in case the deck message is lost.
+      // Wait until joiner's deck arrives, then signal both sides to start
+      // simultaneously via gameStart. Falls through after 3 s.
       const deadline = Date.now() + 3000;
       const poll = () => {
         if (window.deckSystem.player2DeckSetFromNetwork || Date.now() >= deadline) {
+          networkingSystem.sendMessage({ type: "gameStart" });
           doStart();
         } else {
           setTimeout(poll, 100);
         }
       };
       setTimeout(poll, 300);
-    } else {
-      setTimeout(doStart, 800);
     }
+    // Joiner waits for the gameStart message (handled by networkingSystem.onGameStart).
   };
 
   window.onMultiplayerDisconnected = () => {
@@ -196,9 +193,69 @@ function wireConnectionButtons(networkingSystem, statusText) {
  * The host sends a heartbeat every 45 s to refresh its server-side slot so it
  * can wait patiently for an opponent without expiring.
  */
+/**
+ * Local-dev matchmaking via BroadcastChannel. Chrome blocks cross-port HTTP
+ * requests (the same PNA restriction that blocked WebSockets), so we use an
+ * in-browser channel instead.
+ *
+ * Both tabs broadcast "looking" on the same channel every 500 ms until paired.
+ * When a tab hears the other's announcement it fires one final broadcast so the
+ * late-arriving tab can still receive it, then settles on its role.
+ * Earlier timestamp → host; ties broken by id string.
+ */
+function _localMatchQueue() {
+  return new Promise((resolve, reject) => {
+    const ch     = new BroadcastChannel("strategrid-matchqueue");
+    const myId   = Math.random().toString(36).slice(2);
+    const myCode = String(Math.floor(1000 + Math.random() * 9000));
+    const myTime = Date.now();
+    let settled  = false;
+    let interval = null;
+
+    const announce = () => {
+      if (!settled) ch.postMessage({ type: "looking", id: myId, code: myCode, time: myTime });
+    };
+
+    const done = (role, roomCode) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(interval);
+      // Keep channel open briefly so the final announcement we're about to
+      // send has time to reach the other tab before we close.
+      setTimeout(() => ch.close(), 1500);
+      resolve({ role, roomCode });
+    };
+
+    ch.onmessage = (e) => {
+      if (!e.data || e.data.type !== "looking") return;
+      // Send one last announcement so the other tab can determine its role
+      // even if it hadn't heard our earlier ones.
+      announce();
+      const iAmHost = myTime < e.data.time || (myTime === e.data.time && myId < e.data.id);
+      done(
+        iAmHost ? "host"   : "joiner",
+        iAmHost ? myCode   : e.data.code
+      );
+    };
+
+    // Keep announcing every 500 ms so tabs opened at different times find each other.
+    interval = setInterval(announce, 500);
+    announce();
+
+    setTimeout(() => {
+      if (!settled) {
+        clearInterval(interval);
+        ch.close();
+        reject(new Error("No opponent found after 60 s"));
+      }
+    }, 60_000);
+  });
+}
+
 async function startMatchmaking(networkingSystem, statusText) {
-  // ── UPDATE THIS URL after running `wrangler deploy` in the matchmaker/ directory ──
-  const MATCHMAKER_URL = "https://strategrid-matchmaker.happycranjus.workers.dev/matchmake";
+  const MATCH_URL = "https://strategrid-relay.happycranjus.workers.dev/match";
+  const isLocal   =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
   const choiceSection = document.getElementById("choiceSection");
   const mmSection     = document.getElementById("matchmakingSection");
@@ -207,70 +264,78 @@ async function startMatchmaking(networkingSystem, statusText) {
   if (choiceSection) choiceSection.style.display = "none";
   if (mmSection)     mmSection.style.display = "block";
 
+  const clientId  = Math.random().toString(36).slice(2);
   const startTime = Date.now();
+
   const timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-    const ss = String(elapsed % 60).padStart(2, "0");
+    const s  = Math.floor((Date.now() - startTime) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
     if (mmTimer) mmTimer.textContent = `${mm}:${ss}`;
   }, 1000);
-  networkingSystem.matchmakingTimers = { timerInterval, roomCodeInterval: null, heartbeatInterval: null };
+
+  // Store timers before connecting — onMultiplayerConnected cleanup reads these,
+  // and for the joiner path it fires synchronously inside joinAsClient().
+  networkingSystem.matchmakingTimers = { timerInterval, heartbeatInterval: null };
 
   try {
-    if (mmStatus) mmStatus.textContent = "Connecting…";
-    const { peer, peerId } = await networkingSystem.signalingClient.createPeer();
-
     if (mmStatus) mmStatus.textContent = "Finding opponent…";
-    const resp = await fetch(MATCHMAKER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ peerId }),
-    });
-    if (!resp.ok) throw new Error(`Matchmaker returned ${resp.status}`);
-    const { role, hostPeerId } = await resp.json();
+
+    let role, roomCode;
+    if (isLocal) {
+      // Local dev: BroadcastChannel-based queue (no HTTP server needed)
+      ({ role, roomCode } = await _localMatchQueue());
+    } else {
+      // Production: relay worker's /match endpoint
+      const resp = await fetch(MATCH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      if (!resp.ok) throw new Error(`Matchmaker returned ${resp.status}`);
+      ({ role, roomCode } = await resp.json());
+    }
 
     if (role === "host") {
       if (mmStatus) mmStatus.textContent = "Waiting for opponent…";
-      networkingSystem.startAsMatchmakingHost(peer);
+      await networkingSystem.startAsHost(roomCode);
 
-      // Heartbeat: re-register every 45 s so the server-side TTL slot stays alive.
-      const heartbeat = setInterval(async () => {
-        try {
-          const r = await fetch(MATCHMAKER_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ peerId }),
-          });
-          if (!r.ok) return;
-          const hBody = await r.json();
-          if (hBody.role === "joiner") {
-            // Rare: DO was reset between heartbeats; act as joiner now.
-            clearInterval(heartbeat);
-            networkingSystem.matchmakingTimers.heartbeatInterval = null;
-            networkingSystem.startAsMatchmakingJoiner(peer, hBody.hostPeerId);
-          }
-          // role === "host" → slot refreshed, nothing else to do
-        } catch {}
-      }, 45_000);
-      networkingSystem.matchmakingTimers.heartbeatInterval = heartbeat;
+      if (!isLocal) {
+        // Production heartbeat: resets the 120 s TTL on the matchmaker slot.
+        const heartbeatInterval = setInterval(async () => {
+          try {
+            const r = await fetch(MATCH_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clientId }),
+            });
+            if (!r.ok) return;
+            const body = await r.json();
+            if (body.roomCode !== roomCode) {
+              clearInterval(heartbeatInterval);
+              networkingSystem.matchmakingTimers.heartbeatInterval = null;
+              networkingSystem.disconnect();
+              if (mmStatus) mmStatus.textContent = "Matchmaking timed out. Please try again.";
+            }
+          } catch {}
+        }, 45_000);
+        networkingSystem.matchmakingTimers.heartbeatInterval = heartbeatInterval;
+      }
 
-      // Stop heartbeat once a joiner connects.
-      peer.on("connection", () => {
-        clearInterval(heartbeat);
-        if (networkingSystem.matchmakingTimers) networkingSystem.matchmakingTimers.heartbeatInterval = null;
-      });
-
-      // If the PeerJS broker drops the idle connection, reconnect so the peer
-      // ID remains valid when the joiner eventually arrives.
-      peer.on("disconnected", () => {
-        if (networkingSystem.connectionState === "connecting") peer.reconnect();
-      });
     } else {
+      // Joiner: joinAsClient fires onMultiplayerConnected synchronously, which
+      // clears matchmakingTimers before this await returns.
       if (mmStatus) mmStatus.textContent = "Opponent found! Connecting…";
-      networkingSystem.startAsMatchmakingJoiner(peer, hostPeerId);
+      await networkingSystem.joinAsClient(roomCode);
     }
+
   } catch (err) {
     clearInterval(timerInterval);
+    if (networkingSystem.matchmakingTimers) {
+      const t = networkingSystem.matchmakingTimers;
+      if (t.heartbeatInterval) clearInterval(t.heartbeatInterval);
+      networkingSystem.matchmakingTimers = null;
+    }
     const detail = err && err.message ? err.message : String(err);
     if (mmStatus) mmStatus.textContent = `Matchmaking failed: ${detail}`;
     console.error("[Matchmaking]", err);
@@ -452,6 +517,7 @@ function buildHotkeyRails(networkingSystem) {
 // without needing two browsers.
 
 function startPvC() {
+  window.lockstepSystem = null;
   const gs = window.gameState;
   gs.setGameMode("pvc");
   gs.initialize();
@@ -624,6 +690,7 @@ function autoPickIntermission(ds, player) {
 // match feel without setting up two browsers.
 
 function startSandbox() {
+  window.lockstepSystem = null;
   const gs = window.gameState;
   gs.setGameMode("sandbox");
   // canPlayerAct returns true for both players in sandbox (see gameState.js).

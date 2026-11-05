@@ -64,15 +64,22 @@ class GameLoop {
         aiController,
       } = window.gameSetupResult;
       const gameOver = gameState && gameState.gameOver;
-      // PvP client receives authoritative state from host; running the local
-      // simulation would cause divergence (false game-over, timer drift, etc.).
-      const isNetworkClient = gameState && gameState.gameMode === "pvp" &&
-        window.networkingSystem && !window.networkingSystem.isHost;
+      const ls = window.lockstepSystem;
 
       try {
         if (!gameOver) {
-          if (!isNetworkClient) {
-            // Full simulation: host, sandbox, pvc
+          if (ls) {
+            // ── PvP lockstep ──────────────────────────────────────────────
+            // Drive tick commitment at 30 Hz via rAF accumulator.
+            this._tickAccum = (this._tickAccum || 0) + deltaTime;
+            while (this._tickAccum >= LockstepSystem.TICK_DELTA) {
+              ls.commitLocalTick();
+              this._tickAccum -= LockstepSystem.TICK_DELTA;
+            }
+            // Advance simulation for every tick whose inputs have arrived.
+            ls.tryAdvance();
+          } else {
+            // ── Sandbox / PvC: direct variable-delta simulation ───────────
             if (phaseSystem) phaseSystem.update(deltaTime);
 
             const inIntermission = gameState &&
@@ -80,17 +87,15 @@ class GameLoop {
 
             if (!inIntermission) {
               if (influenceSystem) influenceSystem.update(deltaTime);
-              if (resourceSystem) resourceSystem.update(deltaTime);
-              if (aiController) aiController.update(deltaTime);
-              if (troopSystem) troopSystem.update(deltaTime);
-              if (buildingSystem) buildingSystem.update(deltaTime);
+              if (resourceSystem)  resourceSystem.update(deltaTime);
+              if (aiController)    aiController.update(deltaTime);
+              if (troopSystem)     troopSystem.update(deltaTime);
+              if (buildingSystem)  buildingSystem.update(deltaTime);
               if (strategemSystem) strategemSystem.update(deltaTime);
             }
+            // Hero movement only in non-lockstep modes (lockstep reads direction per-tick)
+            if (heroInput) heroInput.update(deltaTime);
           }
-          // Guest: simulation is skipped but HUD still needs to reflect synced state.
-          if (isNetworkClient && resourceSystem) resourceSystem.renderHUD();
-          // Hero input runs on both host and client (PvP client sends heroPosition to host)
-          if (heroInput) heroInput.update(deltaTime);
         }
       } catch (e) {
         console.error("[GameLoop] System update error:", e);

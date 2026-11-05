@@ -163,11 +163,6 @@ class GameState {
    * @param {string} winner - "player1" or "player2"
    */
   setGameOver(winner) {
-    // In PvP the host is the sole authority on game-over; ignore calls that
-    // originate from the client's own divergent local simulation.
-    if (this.gameMode === "pvp" && window.networkingSystem && !window.networkingSystem.isHost) {
-      return;
-    }
     this.gameOver = true;
     this.winner = winner;
     const overlay = document.getElementById("gameOverOverlay");
@@ -240,110 +235,9 @@ class GameState {
   }
 
   /**
-   * Get network state for synchronization
-   * @returns {Object} Network state
-   */
-  getNetworkState() {
-    return {
-      troops: this.troops.map(t => ({
-        ...t,
-        target: null,
-        lastTarget: null,
-        attackFlashTarget: null,
-        thrownBy: null,
-        garrisonedIn: null,
-      })),
-      buildings: this.buildings.map(b => ({
-        ...b,
-        target: null,
-        lastTarget: null,
-        attackFlashTarget: null,
-        occupants: b.occupants ? [] : b.occupants,
-      })),
-      strategems: this.strategems.map(s => ({
-        ...s,
-        cargo: s.cargo ? [] : s.cargo,
-      })),
-      strategemCooldowns: this.strategemCooldowns,
-      heroAbilityCooldowns: this.heroAbilityCooldowns,
-      currentRP: this.currentRP,
-      currentTP: this.currentTP,
-      maxRP: this.maxRP,
-      maxTP: this.maxTP,
-      phase: this.phase,
-      matchTime: this.matchTime,
-      phaseDuration: this.phaseDuration,
-      phaseTimeRemaining: this.phaseTimeRemaining,
-      grid: this.grid,
-      gameOver: this.gameOver,
-      winner: this.winner,
-    };
-  }
-
-  /**
-   * Apply network state (client side)
-   * @param {Object} state - Network state
-   */
-  applyNetworkState(state) {
-    // Remember the local hero's pre-snapshot position so we can restore it
-    // after merging — the local side owns its own hero's col/row to avoid
-    // rubber-banding while moving. HP/target propagate normally.
-    const localId = (window.networkingSystem && window.networkingSystem.getLocalPlayerId
-      && window.networkingSystem.getLocalPlayerId()) || null;
-    let localHeroPos = null;
-    if (localId && state.troops) {
-      const oldHero = localId === "player1" ? this.hero1 : this.hero2;
-      if (oldHero) localHeroPos = { col: oldHero.col, row: oldHero.row };
-    }
-
-    if (state.troops) this.troops = state.troops;
-    if (state.buildings) this.buildings = state.buildings;
-    if (state.strategems) this.strategems = state.strategems;
-    if (state.strategemCooldowns) this.strategemCooldowns = state.strategemCooldowns;
-    if (state.heroAbilityCooldowns) this.heroAbilityCooldowns = state.heroAbilityCooldowns;
-    if (state.currentRP) this.currentRP = state.currentRP;
-    if (state.currentTP) this.currentTP = state.currentTP;
-    if (state.maxRP) this.maxRP = state.maxRP;
-    if (state.maxTP) this.maxTP = state.maxTP;
-    if (state.phase) this.phase = state.phase;
-    if (typeof state.matchTime          === "number") this.matchTime          = state.matchTime;
-    if (typeof state.phaseDuration      === "number") this.phaseDuration      = state.phaseDuration;
-    if (typeof state.phaseTimeRemaining === "number") this.phaseTimeRemaining = state.phaseTimeRemaining;
-    if (state.grid && state.grid.length > 0) this.grid = state.grid;
-
-    // Re-resolve hero refs through the freshly-installed troops array.
-    this.hero1 = this.troops.find((t) => t.isHero && t.owner === "player1") || null;
-    this.hero2 = this.troops.find((t) => t.isHero && t.owner === "player2") || null;
-
-    // Restore the local hero's position so the snapshot does not snap us
-    // backward in the middle of a keypress.
-    if (localId && localHeroPos) {
-      const myHero = localId === "player1" ? this.hero1 : this.hero2;
-      if (myHero) { myHero.col = localHeroPos.col; myHero.row = localHeroPos.row; }
-    }
-
-    // Propagate host's game-over to client. The setGameOver() guard blocks the
-    // client from calling it locally, so we apply it directly here instead.
-    if (state.gameOver === true && !this.gameOver) {
-      this.gameOver = true;
-      this.winner = state.winner || null;
-      const overlay = document.getElementById("gameOverOverlay");
-      if (overlay) {
-        const msg = document.getElementById("gameOverMessage");
-        if (msg) {
-          const local = window.networkingSystem && window.networkingSystem.getLocalPlayerId();
-          msg.textContent = state.winner === local ? "You Win!" : "Opponent Wins!";
-        }
-        overlay.style.display = "flex";
-      }
-    }
-  }
-
-  /**
-   * Apply a player action received over the network (host side).
-   * `player` is the sender's player ID (set by NetworkingSystem from its own
-   * remotePlayerId — clients cannot spoof another player by tweaking the action).
-   * Re-validates costs / zones via the existing UIState handlers.
+   * Apply a player action — called by LockstepSystem._simulateTick() for every
+   * input in both players' tick buffers. Re-validates costs / zones so a
+   * desync or stale input cannot place invalid entities.
    */
   applyPlayerAction(action, player) {
     if (!action || !action.kind) return;
@@ -365,11 +259,12 @@ class GameState {
       case "heroAbility":
         if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility(player);
         break;
-      case "heroPosition": {
+      case "heroMove": {
         const hero = player === "player1" ? this.hero1 : this.hero2;
-        if (hero && typeof action.col === "number" && typeof action.row === "number") {
-          hero.col = action.col;
-          hero.row = action.row;
+        if (hero && hero.hp > 0) {
+          const step = (hero.speed || 0) * LockstepSystem.TICK_DELTA;
+          hero.col = Math.max(0.5, Math.min(this.cols - 1.5, hero.col + action.dx * step));
+          hero.row = Math.max(0.5, Math.min(this.rows - 1.5, hero.row + action.dy * step));
           hero.target = null;
         }
         break;

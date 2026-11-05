@@ -364,7 +364,7 @@ const troopTypes = {
   },
   settler: {
     cost: 1.5,
-    hp: 20,
+    hp: 10,
     damage: 0,
     attackSpeed: 0,
     range: 0,

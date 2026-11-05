@@ -179,7 +179,7 @@ class StrategemSystem {
    */
   _castAmbush(hero, def) {
     const gs = this.gameState;
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const now = this.gameState.matchTime || 0;
     const dur = def.duration || 3;
     hero.invisible = true;
     hero.cloakActive = true;
@@ -602,7 +602,7 @@ class StrategemSystem {
     const gs = this.gameState;
     const radius = def.radius || 2;
     const tail = def.tailDuration != null ? def.tailDuration : 0.5;
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const now = this.gameState.matchTime || 0;
     for (const t of gs.troops) {
       if (t.owner !== s.owner) continue;
       if ((t.invisible && !t.cloakActive) || t.garrisonedIn) continue;
@@ -631,7 +631,7 @@ class StrategemSystem {
     const gs = this.gameState;
     const radius = def.radius || 3;
     const tail = def.tailDuration != null ? def.tailDuration : 0.5;
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const now = this.gameState.matchTime || 0;
     const enemyOwner = s.owner === "player1" ? "player2" : "player1";
     for (const t of gs.troops) {
       if (t.owner !== enemyOwner) continue;
@@ -663,7 +663,7 @@ class StrategemSystem {
     const pulse = def.pulseInterval || 0.5;
     const troopDur = def.troopStunDuration != null ? def.troopStunDuration : 0.5;
     const heroDur  = def.heroStunDuration  != null ? def.heroStunDuration  : 0.25;
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const now = this.gameState.matchTime || 0;
     const enemyOwner = s.owner === "player1" ? "player2" : "player1";
     const isPulseFrame = Math.floor(s.age / pulse) > Math.floor(prevAge / pulse);
 
@@ -706,7 +706,7 @@ class StrategemSystem {
 
   /** Blast: apply center damage + stun + adjacent damage + radial knockback once. */
   _applyBlast(s, def) {
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const now = this.gameState.matchTime || 0;
     const centerCol = s.col;
     const centerRow = s.row;
     for (const t of this.gameState.troops) {

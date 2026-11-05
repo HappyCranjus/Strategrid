@@ -97,7 +97,8 @@ class TroopSystem {
   update(deltaTime) {
     const gs = this.gameState;
     if (!gs || gs.gameOver) return;
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    // Use matchTime (not wall clock) so both sides compute identical timing values.
+    const now = gs.matchTime || 0;
 
     // GC floating damage popups (TTL = 1s).
     if (gs.damagePopups) {

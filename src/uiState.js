@@ -67,6 +67,7 @@ class UIState {
     }
   }
 
+
   _eventToTile(e) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
@@ -86,14 +87,72 @@ class UIState {
 
       if (row < 0 || row >= this.gameState.rows || col < 0 || col >= this.gameState.cols) return;
 
+      const ls = window.lockstepSystem;
+
       if (this.spawnMode) {
-        this._trySpawnTroop(row, col, this.spawnMode.owner, this.spawnMode.troopType);
+        if (ls) {
+          ls.queueInput({ kind: "spawnTroop", row, col, troopType: this.spawnMode.troopType });
+        } else {
+          this._trySpawnTroop(row, col, this.spawnMode.owner, this.spawnMode.troopType);
+        }
       } else if (this.buildMode) {
-        this._tryPlaceBuilding(row, col, this.buildMode.owner, this.buildMode.buildingType);
+        if (ls) {
+          ls.queueInput({ kind: "placeBuilding", row, col, buildingType: this.buildMode.buildingType });
+        } else {
+          this._tryPlaceBuilding(row, col, this.buildMode.owner, this.buildMode.buildingType);
+        }
       } else if (this.strategemMode) {
-        this._tryPlaceStrategem(row, col, this.strategemMode.owner, this.strategemMode.strategemType);
+        // Two-click strategems: manage pending state locally, queue only the final commit.
+        this._tryPlaceStrategemLockstep(row, col, this.strategemMode.owner, this.strategemMode.strategemType, ls);
       }
     });
+  }
+
+  /**
+   * Strategem placement that is lockstep-aware. Single-click strategems queue
+   * directly; two-click strategems (twoClick targeting) manage pendingStrategem
+   * state locally and queue the resolved params on the second click.
+   */
+  _tryPlaceStrategemLockstep(row, col, owner, strategemType, ls) {
+    if (!ls) {
+      this._tryPlaceStrategem(row, col, owner, strategemType);
+      return;
+    }
+
+    const gs = this.gameState;
+    const def = (this.gameLogic.strategemTypes || {})[strategemType];
+    if (!def) return;
+
+    if (def.targeting === "twoClick") {
+      if (!this.pendingStrategem) {
+        this.pendingStrategem = { strategemType, owner, row, col };
+        return;
+      }
+      const start = this.pendingStrategem;
+      const dirCol = col - start.col;
+      const dirRow = row - start.row;
+      const params = {
+        owner,
+        row: start.row,
+        col: start.col,
+        dirCol: dirCol || (owner === "player1" ? 1 : -1),
+        dirRow,
+        endCol: col,
+        endRow: row,
+      };
+      this.pendingStrategem = null;
+      ls.queueInput({ kind: "placeStrategem", strategemType, params });
+      this.strategemMode = null;
+    } else {
+      const midCol = Math.floor(gs.cols / 2);
+      const inOwnHalf =
+        (owner === "player1" && col >= 0 && col < midCol) ||
+        (owner === "player2" && col >= midCol && col <= gs.cols - 1);
+      if (def.targeting === "tile_ownHalf" && !inOwnHalf) return;
+
+      ls.queueInput({ kind: "placeStrategem", strategemType, params: { owner, row, col } });
+      this.strategemMode = null;
+    }
   }
 
   _trySpawnTroop(row, col, owner, troopType) {
@@ -118,10 +177,16 @@ class UIState {
       troop.activationTime = 1.2;
       troop.activationDuration = 1.2;
     }
+    // Settlers always use their full activation window regardless of spawn position.
+    if (troopType === "settler") {
+      troop.active = false;
+      troop.activationTime = 3.5;
+      troop.activationDuration = 3.5;
+    }
 
     if (troopType === "ninja") {
       const def = (this.gameLogic.troopTypes || {}).ninja || {};
-      const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+      const now = gs.matchTime || 0;  // matchTime is identical on both clients
       troop.invisible    = true;
       troop.cloakActive  = true;
       troop.cloakedUntil = now + (def.spawnCloakDuration || 5.0);
@@ -162,6 +227,14 @@ class UIState {
       zoneOK = inBounds && col === enemyBackCol;
     } else {
       zoneOK = inBounds && tileOwner === owner;
+      if (zoneOK) {
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dr, dc] of dirs) {
+          const nr = row + dr, nc = col + dc;
+          if (nr < 0 || nr >= gs.rows || nc < 0 || nc >= gs.cols) { zoneOK = false; break; }
+          if (gs.grid[nr][nc].owner !== owner) { zoneOK = false; break; }
+        }
+      }
     }
 
     const def = (this.gameLogic.troopTypes || {})[troopType] || {};

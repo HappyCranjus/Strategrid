@@ -23,12 +23,10 @@ class GameSetup {
     const heroInput        = new HeroInput(gameState);
 
     // Networking is constructed even outside PvP so uiState can pass a reference; it
-    // becomes active only after a hello/join handshake.
-    const signalingClient  = new SignalingClient();
+    // becomes active only after startAsHost() / joinAsClient().
     const networkingSystem = new NetworkingSystem(
       gameState, null, gameLogic, troopSystem, buildingSystem, strategemSystem, audioManager
     );
-    networkingSystem.signalingClient = signalingClient;
 
     const uiState = new UIState(
       canvas, gameState, gameLogic,
@@ -42,7 +40,7 @@ class GameSetup {
       troopSystem, buildingSystem, strategemSystem,
       influenceSystem, phaseSystem,
       resourceSystem, audioManager, renderer, uiState, gameLoop,
-      networkingSystem, signalingClient, heroInput,
+      networkingSystem, heroInput,
     };
   }
 }

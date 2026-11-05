@@ -1,0 +1,18 @@
+{
+  "name": "strategrid-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-24",
+  "vars": {
+    "LOCAL_DEV": "true"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "RELAY",       "class_name": "GameRelay"  },
+      { "name": "MATCH_QUEUE", "class_name": "MatchQueue" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GameRelay"]  },
+    { "tag": "v2", "new_sqlite_classes": ["MatchQueue"] }
+  ]
+}

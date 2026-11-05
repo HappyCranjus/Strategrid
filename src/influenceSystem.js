@@ -1,8 +1,10 @@
 /**
  * InfluenceSystem - per-frame tile-control accumulation.
  *
- * Each troop adds influence to its occupied tile (0.5/sec) and to the 4
- * cardinal-adjacent tiles (0.1/sec). Influence is a signed scalar in [-1, +1]:
+ * Regular troops add influence to their occupied tile (0.05/sec) and to the 4
+ * cardinal-adjacent tiles (0.01/sec). Heroes add 1/6/sec occupied and 1/18/sec
+ * adjacent (3s claim from neutral; 9s via adjacency alone). Influence is a signed
+ * scalar in [-1, +1]:
  * positive = player1, negative = player2. Opposing troops on the same tile
  * cancel naturally (their per-frame deltas have opposite signs).
  *
@@ -24,16 +26,20 @@ class InfluenceSystem {
     // Tuned slow: 10s to claim an occupied tile, 50s for a single adjacency.
     // A marching swordsman (2s/tile) leaves +0.1 per tile -- well under the 0.5
     // claim threshold -- so solo marching no longer auto-claims territory.
-    const occupiedDelta = 0.05 * deltaTime;
-    const adjacentDelta = 0.01 * deltaTime;
+    const occupiedDelta     = 0.05 * deltaTime;
+    const adjacentDelta     = 0.01 * deltaTime;
+    const heroOccupiedDelta = (1 / 6)  * deltaTime;  // 3s claim from neutral
+    const heroAdjacentDelta = (1 / 18) * deltaTime;  // 1/3 of occupation rate
 
     for (const t of gs.troops) {
       const sign = t.owner === "player1" ? +1 : -1;
-      const r = Math.floor(t.row);
-      const c = Math.floor(t.col);
-      this._apply(r, c, sign * occupiedDelta);
+      const r    = Math.floor(t.row);
+      const c    = Math.floor(t.col);
+      const occD = t.isHero ? heroOccupiedDelta : occupiedDelta;
+      const adjD = t.isHero ? heroAdjacentDelta : adjacentDelta;
+      this._apply(r, c, sign * occD);
       for (const [dr, dc] of ADJ) {
-        this._apply(r + dr, c + dc, sign * adjacentDelta);
+        this._apply(r + dr, c + dc, sign * adjD);
       }
     }
 

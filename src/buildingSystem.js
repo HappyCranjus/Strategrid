@@ -14,7 +14,8 @@ function applyChillStacks(target, n) {
   if (!target || n <= 0) return;
   target.chillStacks = (target.chillStacks || 0) + n;
   if (target.chillStacks >= 80) {
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const gs = window.gameSetupResult && window.gameSetupResult.gameState;
+    const now = gs ? (gs.matchTime || 0) : (performance.now() / 1000);
     target.frozenUntil = now + 1;
     target.chillStacks = 25;
   }

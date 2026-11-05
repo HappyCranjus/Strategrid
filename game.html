@@ -35,7 +35,11 @@
             <span class="resource-value tiles-value" id="tilesOpponent">0</span>
           </div>
           <div id="phaseDisplayContainer">
-            <div id="phaseDisplay">Connecting…</div>
+            <div id="phaseScoreLine">
+              <span id="scorePlayer">0</span>
+              <div id="phaseDisplay">Connecting…</div>
+              <span id="scoreOpponent">0</span>
+            </div>
             <div class="progress-bar"><div class="progress-fill" id="phaseProgressBar"></div></div>
           </div>
         </div>
@@ -66,6 +70,7 @@
             <button id="muteBtn">🔊 Sound</button>
             <button id="visionToggleBtn" class="toggle-btn">👁 Vision</button>
             <button id="rangeToggleBtn" class="toggle-btn">⊕ Range</button>
+            <button id="heroReticleBtn" class="toggle-btn">⊕ Hero</button>
             <div id="spawnModeDisplay"></div>
             <div id="buildModeDisplay"></div>
             <div id="planModeDisplay"></div>
@@ -134,24 +139,25 @@
     <!-- Load modules in dependency order -->
     <script src="src/audioManager.js?v=2"></script>
     <script src="src/gameLogic.js?v=10"></script>
-    <script src="src/gameState.js?v=11"></script>
+    <script src="src/gameState.js?v=12"></script>
     <script src="src/deckSystem.js?v=3"></script>
     <script src="src/influenceSystem.js?v=3"></script>
     <script src="src/phaseSystem.js?v=1"></script>
     <script src="src/resourceSystem.js?v=6"></script>
-    <script src="src/troopSystem.js?v=15"></script>
-    <script src="src/buildingSystem.js?v=6"></script>
-    <script src="src/strategemSystem.js?v=3"></script>
+    <script src="src/troopSystem.js?v=16"></script>
+    <script src="src/buildingSystem.js?v=7"></script>
+    <script src="src/strategemSystem.js?v=4"></script>
     <script src="src/settings.js?v=1"></script>
     <script src="src/renderer.js?v=20"></script>
-    <script src="src/uiState.js?v=6"></script>
-    <script src="src/signalingClient.js?v=2"></script>
-    <script src="src/networkingSystem.js?v=6"></script>
-    <script src="src/heroInput.js?v=8"></script>
-    <script src="src/gameLoop.js?v=7"></script>
-    <script src="src/gameSetup.js?v=5"></script>
+    <script src="src/uiState.js?v=8"></script>
+    <script src="src/lockstepSystem.js?v=1"></script>
+    <script src="src/relayClient.js?v=2"></script>
+    <script src="src/networkingSystem.js?v=9"></script>
+    <script src="src/heroInput.js?v=10"></script>
+    <script src="src/gameLoop.js?v=9"></script>
+    <script src="src/gameSetup.js?v=6"></script>
     <script src="src/aiController.js?v=1"></script>
-    <script src="src/game.js?v=15"></script>
+    <script src="src/game.js?v=19"></script>
 
     <script>
       // Pause + Mute toggles
@@ -193,6 +199,9 @@
         wireToggle("rangeToggleBtn",
           () => window.userSettings.getShowRange(),
           (v) => window.userSettings.setShowRange(v));
+        wireToggle("heroReticleBtn",
+          () => window.userSettings.getShowHeroReticle(),
+          (v) => window.userSettings.setShowHeroReticle(v));
       });
     </script>
   </body>

@@ -15,13 +15,8 @@ class ResourceSystem {
     if (!this.gameState) return;
     const gs = this.gameState;
 
-    // Phase-keyed caps grow with the game; phase-keyed RP rates unchanged.
-    // Intermissions hold the prior phase's cap so the bar doesn't jump mid-draft.
-    // Sandbox sets its own 50/20 caps at startup — defer to the gs value there
-    // instead of overwriting every frame.
     const isSandbox = gs.gameMode === "sandbox";
     const caps = ResourceSystem.PHASE_CAPS[gs.phase] || { rp: 10, tp: 5 };
-    const maxRP = isSandbox ? (gs.maxRP.player1 || caps.rp) : caps.rp;
     const maxTP = isSandbox ? (gs.maxTP.player1 || caps.tp) : caps.tp;
     const [base, scale] = ResourceSystem.PHASE_RATES[gs.phase] || [0, 0];
 
@@ -57,11 +52,20 @@ class ResourceSystem {
                      window.networkingSystem.getLocalPlayerId()) || "player1";
     const prevRP = gs.currentRP[localId] || 0;
     const prevTP = gs.currentTP[localId] || 0;
+    const prevMaxRP = gs.maxRP[localId] || 10;
 
     for (const player of ["player1", "player2"]) {
-      const rate = base + scale * tileCounts[player];
+      const rate = base;
       rates[player] = rate;
-      gs.currentRP[player] = Math.min((gs.currentRP[player] || 0) + rate * deltaTime, maxRP);
+      if (!gs.maxRP[player]) gs.maxRP[player] = 10;
+      const rpCap = gs.maxRP[player];
+      const newRPVal = (gs.currentRP[player] || 0) + rate * deltaTime;
+      if (newRPVal > rpCap) {
+        gs.maxRP[player] = rpCap + (newRPVal - rpCap) * 0.40;
+        gs.currentRP[player] = gs.maxRP[player];
+      } else {
+        gs.currentRP[player] = newRPVal;
+      }
 
       const initCount = (gs.initialTileCount && gs.initialTileCount[player]) || 1;
       const tpBonus = TP_BASE * (lostCounts[player] / initCount);
@@ -73,7 +77,7 @@ class ResourceSystem {
     if (am) {
       const newRP = gs.currentRP[localId];
       const newTP = gs.currentTP[localId];
-      if (prevRP < maxRP && newRP >= maxRP)                                      am.playSound("fullRP");
+      if (prevRP < prevMaxRP && newRP >= prevMaxRP)                              am.playSound("fullRP");
       else if (Math.floor(newRP / 5) > Math.floor(prevRP / 5))                  am.playThrottled("rpMilestone", 500);
       if (prevTP < maxTP && newTP >= maxTP)                                      am.playSound("fullTP");
       else if (Math.floor(newTP) > Math.floor(prevTP))                           am.playThrottled("tpGain", 500);
@@ -83,7 +87,6 @@ class ResourceSystem {
     // reads gs.maxRP[owner]) and any other readers see the phase-aware ceiling.
     // Skip in sandbox so its dev-mode 50/20 caps aren't clobbered.
     if (!isSandbox) {
-      gs.maxRP.player1 = gs.maxRP.player2 = maxRP;
       gs.maxTP.player1 = gs.maxTP.player2 = maxTP;
     }
 
@@ -106,7 +109,6 @@ class ResourceSystem {
 
     const isSandbox = gs.gameMode === "sandbox";
     const caps = ResourceSystem.PHASE_CAPS[gs.phase] || { rp: 10, tp: 5 };
-    const maxRP = isSandbox ? (gs.maxRP.player1 || caps.rp) : caps.rp;
     const maxTP = isSandbox ? (gs.maxTP.player1 || caps.tp) : caps.tp;
     const [base, scale] = ResourceSystem.PHASE_RATES[gs.phase] || [0, 0];
 
@@ -114,19 +116,24 @@ class ResourceSystem {
                      window.networkingSystem.getLocalPlayerId()) || "player1";
     const oppId = localId === "player1" ? "player2" : "player1";
 
-    this._updateBar("rpBarPlayer",   gs.currentRP[localId], maxRP);
+    const maxRPPlayer = gs.maxRP[localId] || 10;
+    const maxRPOpp    = gs.maxRP[oppId]   || 10;
+
+    this._updateBar("rpBarPlayer",   gs.currentRP[localId], maxRPPlayer);
     this._updateBar("tpBarPlayer",   gs.currentTP[localId], maxTP);
-    this._updateBar("rpBarOpponent", gs.currentRP[oppId],   maxRP);
+    this._updateBar("rpBarOpponent", gs.currentRP[oppId],   maxRPOpp);
     this._updateBar("tpBarOpponent", gs.currentTP[oppId],   maxTP);
 
     this._setText("rpValuePlayer",   (gs.currentRP[localId] || 0).toFixed(1));
     this._setText("rpValueOpponent", (gs.currentRP[oppId]   || 0).toFixed(1));
-    this._setText("rpRatePlayer",   "+" + (base + scale * tileCounts[localId]).toFixed(2));
-    this._setText("rpRateOpponent", "+" + (base + scale * tileCounts[oppId]).toFixed(2));
+    this._setText("rpRatePlayer",   "+" + base.toFixed(2));
+    this._setText("rpRateOpponent", "+" + base.toFixed(2));
     this._setText("tpValuePlayer",   (gs.currentTP[localId] || 0).toFixed(1));
     this._setText("tpValueOpponent", (gs.currentTP[oppId]   || 0).toFixed(1));
     this._setText("tilesPlayer",   tileCounts[localId]);
     this._setText("tilesOpponent", tileCounts[oppId]);
+    this._setText("scorePlayer",   tileCounts[localId]);
+    this._setText("scoreOpponent", tileCounts[oppId]);
   }
 
   _updateBar(barId, value, max) {
@@ -141,9 +148,9 @@ class ResourceSystem {
 }
 
 ResourceSystem.PHASE_RATES = {
-  opening:       [0.70,  0.0021],
-  assault:       [0.875, 0.0035],
-  endgame:       [1.40,  0.0049],
+  opening:       [0.50,  0.0021],
+  assault:       [0.75,  0.0035],
+  endgame:       [1.00,  0.0049],
   intermission1: [0,     0],
   intermission2: [0,     0],
 };

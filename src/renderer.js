@@ -180,6 +180,7 @@ class Renderer {
     const { ctx } = this;
     const ts = gs.tileSize;
     const midCol = Math.floor(gs.cols / 2);
+    const localId = (window.networkingSystem?.getLocalPlayerId?.()) || "player1";
 
     for (let row = 0; row < gs.rows; row++) {
       for (let col = 0; col < gs.cols; col++) {
@@ -197,13 +198,22 @@ class Renderer {
           ctx.fillRect(col * ts, row * ts, ts, ts);
         }
 
-        // Influence tint: 0 invisible, +/-0.5 mid (claim threshold), +/-1 saturated.
+        // Influence bar: 3 px strip at tile bottom. Blue fills left→right for
+        // player1, red fills right→left for player2. Bar center = claim threshold.
         const tile = gs.grid[row][col];
         const inf = tile && tile.influence;
         if (inf) {
-          const a = 0.05 + 0.30 * Math.abs(inf);
-          ctx.fillStyle = inf > 0 ? `rgba(51,153,255,${a})` : `rgba(255,68,68,${a})`;
-          ctx.fillRect(col * ts, row * ts, ts, ts);
+          const barH = 3;
+          const barY = row * ts + ts - barH;
+          if (inf > 0) {
+            const w = Math.min(inf, 1) * ts;
+            ctx.fillStyle = "#1a5a9a";
+            ctx.fillRect(col * ts, barY, w, barH);
+          } else {
+            const w = Math.min(-inf, 1) * ts;
+            ctx.fillStyle = "#9a2020";
+            ctx.fillRect(col * ts + ts - w, barY, w, barH);
+          }
         }
 
         // Claimed-tile border: makes spawnable tiles read at a glance. Unclaimed
@@ -216,6 +226,24 @@ class Renderer {
           ctx.strokeStyle = "#1a1a1a";
           ctx.lineWidth = 0.5;
           ctx.strokeRect(col * ts, row * ts, ts, ts);
+        }
+
+        // Spawn dot: small dark circle on tiles where each player can deploy.
+        for (const pid of ["player1", "player2"]) {
+          if (!tile || tile.owner !== pid) continue;
+          const spawnDirs = [[-1,0],[1,0],[0,-1],[0,1]];
+          let spawnable = true;
+          for (const [dr, dc] of spawnDirs) {
+            const nr = row + dr, nc = col + dc;
+            if (nr < 0 || nr >= gs.rows || nc < 0 || nc >= gs.cols) { spawnable = false; break; }
+            if (gs.grid[nr][nc].owner !== pid) { spawnable = false; break; }
+          }
+          if (spawnable) {
+            ctx.beginPath();
+            ctx.arc(col * ts + ts / 2, row * ts + ts / 2, 3, 0, Math.PI * 2);
+            ctx.fillStyle = pid === "player1" ? "#1a4a80" : "#801a1a";
+            ctx.fill();
+          }
         }
       }
     }
@@ -507,6 +535,22 @@ class Renderer {
         ctx.fillText(hpLabel, cx, hpY);
         ctx.textAlign = "start";
         ctx.textBaseline = "alphabetic";
+
+        // Hero reticle: crosshair drawn at the exact float-position center so
+        // the player always sees where the hero truly is regardless of sprite size.
+        if (window.userSettings && window.userSettings.getShowHeroReticle()) {
+          const arm = ts * 0.18;
+          const gap = ts * 0.05;
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = 1.5;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(cx - arm, cy); ctx.lineTo(cx - gap, cy);
+          ctx.moveTo(cx + gap, cy); ctx.lineTo(cx + arm, cy);
+          ctx.moveTo(cx, cy - arm); ctx.lineTo(cx, cy - gap);
+          ctx.moveTo(cx, cy + gap); ctx.lineTo(cx, cy + arm);
+          ctx.stroke();
+        }
       }
 
       // Activation indicator: arc + numeric countdown, owner-colored.

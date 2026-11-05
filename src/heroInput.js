@@ -41,10 +41,12 @@ class HeroInput {
           const owner = (mode === "pvp" && ns && ns.getLocalPlayerId)
             ? ns.getLocalPlayerId()
             : "player1";
-          if (ns && ns.connectionState === "connected" && !ns.isHost) {
-            ns.sendMessage({ type: "playerAction", action: { kind: "heroAbility" } });
-          } else if (ss && ss.tryActivateHeroAbility) {
-            ss.tryActivateHeroAbility(owner);
+          if (window.lockstepSystem) {
+            // Lockstep: queue hero ability input for the next committed tick
+            window.lockstepSystem.queueInput({ kind: "heroAbility" });
+          } else {
+            // Sandbox / PvC: apply immediately
+            if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility(owner);
           }
         } else if (k === "enter" && mode === "sandbox") {
           if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility("player2");
@@ -67,21 +69,35 @@ class HeroInput {
     window.addEventListener("blur",    onBlur);
   }
 
+  /**
+   * Returns the normalised direction vector for `owner` based on currently
+   * held keys. Used by LockstepSystem.commitLocalTick() to include heroMove
+   * in each tick's input packet. Keys are still tracked live via event handlers.
+   */
+  getHeroDirection(owner) {
+    const mode = this.gameState && this.gameState.gameMode;
+    if (mode === "pvp") {
+      return this._combine(this._readWASD(), this._readArrows());
+    }
+    return owner === "player1" ? this._readWASD() : this._readArrows();
+  }
+
   update(deltaTime) {
     const gs = this.gameState;
     if (!gs || gs.gameOver) return;
+
+    // In PvP lockstep mode, hero movement is applied per-tick by LockstepSystem
+    // via the heroMove input kind. Direction is read in getHeroDirection().
+    if (window.lockstepSystem) return;
 
     const mode = gs.gameMode;
     const localId = (window.networkingSystem && window.networkingSystem.getLocalPlayerId
       && window.networkingSystem.getLocalPlayerId()) || "player1";
 
     if (mode === "pvp") {
-      // PvP: only your own hero moves. Accept WASD OR arrows so the player
-      // can pick whichever set fits their hand.
       const vec = this._combine(this._readWASD(), this._readArrows());
       this._driveHero(localId, vec, deltaTime);
     } else {
-      // Sandbox / single / training: each keyset drives its own hero.
       this._driveHero("player1", this._readWASD(),   deltaTime);
       this._driveHero("player2", this._readArrows(), deltaTime);
     }
@@ -144,17 +160,15 @@ class HeroInput {
     // Targeting re-acquires next tick via TroopSystem._findTarget.
     hero.target = null;
 
-    // PvP client: throttle-broadcast our hero position to the host. The host's
-    // applyPlayerAction("heroPosition") writes it onto gs.hero2, and the next
-    // 100ms snapshot delivers it back to everyone (rubber-band in applyNetworkState
-    // preserves our own position locally).
+    // Both host and joiner broadcast their hero's position every 100 ms so
+    // the opponent's local simulation can track it (non-lockstep mode only).
     const ns = window.networkingSystem;
-    if (ns && ns.connectionState === "connected" && !ns.isHost && owner === ns.getLocalPlayerId()) {
+    if (ns && ns.connectionState === "connected" && owner === ns.getLocalPlayerId()) {
       const nowMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
       if (!this._lastHeroSyncMs || nowMs - this._lastHeroSyncMs >= 100) {
         this._lastHeroSyncMs = nowMs;
         ns.sendMessage({
-          type: "playerAction",
+          type: "actionBroadcast",
           action: { kind: "heroPosition", col: hero.col, row: hero.row },
         });
       }
