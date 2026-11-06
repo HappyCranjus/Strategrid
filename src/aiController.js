@@ -25,20 +25,21 @@ const ACTIVE_PHASES = new Set(["opening", "assault", "endgame"]);
 const INTERMISSION_PHASES = new Set(["intermission1", "intermission2"]);
 const TWO_CLICK_STRATEGEMS = new Set(["wind", "lesserTeleport", "greaterTeleport"]);
 
-const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
-
 class AIController {
-  constructor(gameState, gameLogic, deckSystem, strategemSystem, uiState) {
+  constructor(gameState, gameLogic, deckSystem, strategemSystem, uiState, rng = Math.random.bind(Math)) {
     this.gameState = gameState;
     this.gameLogic = gameLogic;
     this.deckSystem = deckSystem;
     this.strategemSystem = strategemSystem;
     this.uiState = uiState;
+    this.rng = rng;
 
     this.owner = "player2";
     this.lastPhase = null;
     this.campaign = null; // { troopType, rate, remainingDur, accum }
   }
+
+  _randInt(lo, hi) { return lo + Math.floor(this.rng() * (hi - lo + 1)); }
 
   update(dt) {
     const gs = this.gameState;
@@ -50,6 +51,7 @@ class AIController {
       this._tickSpawnCampaign(dt);
       this._tickStrategems();
       this._tickHeroAbility();
+      this._tickHeroMovement(dt);
     }
   }
 
@@ -78,10 +80,10 @@ class AIController {
     const troopPool = ds.getAvailableTroops().filter((t) => !deck.troops.includes(t));
     const stratPool = ds.getAvailableStrategems().filter((s) => !deck.strategems.includes(s));
     if (troopPool.length) {
-      ds.addTroop(this.owner, troopPool[Math.floor(Math.random() * troopPool.length)]);
+      ds.addTroop(this.owner, troopPool[Math.floor(this.rng() * troopPool.length)]);
     }
     if (stratPool.length) {
-      ds.addStrategem(this.owner, stratPool[Math.floor(Math.random() * stratPool.length)]);
+      ds.addStrategem(this.owner, stratPool[Math.floor(this.rng() * stratPool.length)]);
     }
   }
 
@@ -92,11 +94,11 @@ class AIController {
     if (!this.campaign || this.campaign.remainingDur <= 0) {
       // Random deck slot. Bound by current deck size so post-intermission picks
       // (deck grows 4 → 5 → 6) get rolled into the AI's repertoire.
-      const slot = randInt(1, deck.troops.length);
+      const slot = this._randInt(1, deck.troops.length);
       this.campaign = {
         troopType: deck.troops[slot - 1],
-        rate: randInt(1, 4),
-        remainingDur: randInt(1, 4),
+        rate: this._randInt(1, 4),
+        remainingDur: this._randInt(1, 4),
         accum: 0,
       };
     }
@@ -131,7 +133,7 @@ class AIController {
   _randomEnemyBackColTile() {
     const gs = this.gameState;
     const col = (this.owner === "player1") ? gs.cols - 1 : 0;
-    const row = Math.floor(Math.random() * gs.rows);
+    const row = Math.floor(this.rng() * gs.rows);
     return { row, col };
   }
 
@@ -144,7 +146,13 @@ class AIController {
       }
     }
     if (tiles.length === 0) return null;
-    return tiles[Math.floor(Math.random() * tiles.length)];
+    // Bias toward frontline: 60% chance to pick from the most-forward 30% of tiles
+    tiles.sort((a, b) => this.owner === "player1" ? b.col - a.col : a.col - b.col);
+    if (this.rng() < 0.6) {
+      const frontN = Math.max(1, Math.ceil(tiles.length * 0.3));
+      return tiles[Math.floor(this.rng() * frontN)];
+    }
+    return tiles[Math.floor(this.rng() * tiles.length)];
   }
 
   _randomEnemyTile() {
@@ -157,7 +165,7 @@ class AIController {
       }
     }
     if (tiles.length === 0) return null;
-    return tiles[Math.floor(Math.random() * tiles.length)];
+    return tiles[Math.floor(this.rng() * tiles.length)];
   }
 
   _tickStrategems() {
@@ -215,6 +223,30 @@ class AIController {
   _tickHeroAbility() {
     if (!this.strategemSystem) return;
     this.strategemSystem.tryActivateHeroAbility(this.owner);
+  }
+
+  _tickHeroMovement(dt) {
+    const gs = this.gameState;
+    const hero = this.owner === "player1" ? gs.hero1 : gs.hero2;
+    if (!hero || hero.hp <= 0) return;
+
+    const oppOwner = this.owner === "player1" ? "player2" : "player1";
+    const oppHero  = oppOwner === "player1" ? gs.hero1 : gs.hero2;
+
+    // Move toward the opponent hero; fall back to enemy back column.
+    const targetCol = (oppHero && oppHero.hp > 0) ? oppHero.col
+                    : (this.owner === "player1" ? gs.cols - 1 : 0);
+    const targetRow = (oppHero && oppHero.hp > 0) ? oppHero.row : hero.row;
+
+    const dxRaw = targetCol - hero.col;
+    const dyRaw = targetRow - hero.row;
+    const len = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
+    if (len < 0.5) return; // close enough
+
+    const step = (hero.speed || 0) * dt;
+    hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + (dxRaw / len) * step));
+    hero.row = Math.max(0.5, Math.min(gs.rows - 1.5, hero.row + (dyRaw / len) * step));
+    hero.target = null; // troopSystem re-acquires next frame
   }
 }
 
