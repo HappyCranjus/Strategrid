@@ -132,13 +132,45 @@
 
     <!-- Game Over Overlay -->
     <div id="gameOverOverlay" style="display:none">
-      <h2 id="gameOverMessage">Game Over</h2>
-      <button id="backToMenuBtn">Back to Menu</button>
+      <div class="gameover-card">
+        <h2 id="gameOverMessage">Game Over</h2>
+        <div id="matchEndCondition" class="end-condition"></div>
+
+        <div class="tile-bar-wrap">
+          <div class="tile-counts">
+            <span id="statTilesBlue" class="blue-val">—</span>
+            <span class="stat-label">Tiles</span>
+            <span id="statTilesRed" class="red-val">—</span>
+          </div>
+          <div class="tile-bar">
+            <div id="tileBarBlue" class="tile-seg blue-seg" style="width:0%"></div>
+            <div id="tileBarRed"  class="tile-seg red-seg"  style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <span class="stats-col-head blue-val">Blue</span><span></span><span class="stats-col-head red-val">Red</span>
+          <span id="statTroopsDeployedBlue"  class="blue-val">—</span><span class="stat-label">Troops Deployed</span> <span id="statTroopsDeployedRed"  class="red-val">—</span>
+          <span id="statTroopsKilledBlue"    class="blue-val">—</span><span class="stat-label">Troops Killed</span>   <span id="statTroopsKilledRed"    class="red-val">—</span>
+          <span id="statRpGeneratedBlue"     class="blue-val">—</span><span class="stat-label">RP Generated</span>    <span id="statRpGeneratedRed"     class="red-val">—</span>
+          <span id="statRpSpentBlue"         class="blue-val">—</span><span class="stat-label">RP Spent</span>        <span id="statRpSpentRed"         class="red-val">—</span>
+          <span id="statTpGeneratedBlue"     class="blue-val">—</span><span class="stat-label">TP Generated</span>    <span id="statTpGeneratedRed"     class="red-val">—</span>
+          <span id="statTpSpentBlue"         class="blue-val">—</span><span class="stat-label">TP Spent</span>        <span id="statTpSpentRed"         class="red-val">—</span>
+          <span id="statBuildingsPlacedBlue" class="blue-val">—</span><span class="stat-label">Buildings Placed</span><span id="statBuildingsPlacedRed" class="red-val">—</span>
+          <span id="statBuildingsDestrBlue"  class="blue-val">—</span><span class="stat-label">Bldgs Destroyed</span><span id="statBuildingsDestrRed"  class="red-val">—</span>
+          <span id="statTowersTakenBlue"     class="blue-val">—</span><span class="stat-label">Towers Taken</span>   <span id="statTowersTakenRed"     class="red-val">—</span>
+          <span id="statTowersLostBlue"      class="blue-val">—</span><span class="stat-label">Towers Lost</span>    <span id="statTowersLostRed"      class="red-val">—</span>
+        </div>
+
+        <div id="matchDuration" class="match-duration">—</div>
+        <button id="backToMenuBtn">Back to Menu</button>
+      </div>
     </div>
 
     <!-- Load modules in dependency order -->
     <script src="src/audioManager.js?v=2"></script>
     <script src="src/gameLogic.js?v=10"></script>
+    <script src="src/gameActions.js?v=1"></script>
     <script src="src/gameState.js?v=12"></script>
     <script src="src/deckSystem.js?v=3"></script>
     <script src="src/influenceSystem.js?v=3"></script>
@@ -150,13 +182,14 @@
     <script src="src/settings.js?v=1"></script>
     <script src="src/renderer.js?v=20"></script>
     <script src="src/uiState.js?v=8"></script>
+    <script src="src/seededRandom.js?v=1"></script>
     <script src="src/lockstepSystem.js?v=1"></script>
     <script src="src/relayClient.js?v=2"></script>
     <script src="src/networkingSystem.js?v=9"></script>
     <script src="src/heroInput.js?v=10"></script>
     <script src="src/gameLoop.js?v=9"></script>
     <script src="src/gameSetup.js?v=6"></script>
-    <script src="src/aiController.js?v=1"></script>
+    <script src="src/aiController.js?v=2"></script>
     <script src="src/game.js?v=19"></script>
 
     <script>

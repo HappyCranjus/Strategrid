@@ -61,7 +61,8 @@ class InfluenceSystem {
         else if (o === "player2") p2++;
       }
     }
-    console.log(`[Influence] p1Tiles=${p1} p2Tiles=${p2} troops=${gs.troops.length} phase=${gs.phase}`);
+    // Debug heartbeat — uncomment to trace influence in-browser:
+    // console.log(`[Influence] p1Tiles=${p1} p2Tiles=${p2} troops=${gs.troops.length} phase=${gs.phase}`);
   }
 
   _apply(r, c, delta) {

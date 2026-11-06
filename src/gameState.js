@@ -51,6 +51,15 @@ class GameState {
     this.currentPlayer = "player1";
     this.gameOver = false;
     this.winner = null;
+
+    this.matchStats = {
+      player1: { troopsSpawned:0, troopsKilled:0, buildingsPlaced:0,
+                 buildingsDestroyed:0, towersTaken:0, towersLost:0,
+                 rpGenerated:0, rpSpent:0, tpGenerated:0, tpSpent:0 },
+      player2: { troopsSpawned:0, troopsKilled:0, buildingsPlaced:0,
+                 buildingsDestroyed:0, towersTaken:0, towersLost:0,
+                 rpGenerated:0, rpSpent:0, tpGenerated:0, tpSpent:0 },
+    };
   }
 
   /**
@@ -78,6 +87,15 @@ class GameState {
     this.currentPlayer = "player1";
     this.gameOver = false;
     this.winner = null;
+
+    this.matchStats = {
+      player1: { troopsSpawned:0, troopsKilled:0, buildingsPlaced:0,
+                 buildingsDestroyed:0, towersTaken:0, towersLost:0,
+                 rpGenerated:0, rpSpent:0, tpGenerated:0, tpSpent:0 },
+      player2: { troopsSpawned:0, troopsKilled:0, buildingsPlaced:0,
+                 buildingsDestroyed:0, towersTaken:0, towersLost:0,
+                 rpGenerated:0, rpSpent:0, tpGenerated:0, tpSpent:0 },
+    };
 
     // Initialize grid with neutral tiles.
     this.grid = [];
@@ -165,20 +183,78 @@ class GameState {
   setGameOver(winner) {
     this.gameOver = true;
     this.winner = winner;
-    const overlay = document.getElementById("gameOverOverlay");
-    if (overlay) {
-      const msg = document.getElementById("gameOverMessage");
-      if (msg) {
-        if (this.gameMode === "sandbox") {
-          msg.textContent = winner === "player1" ? "Blue Wins!" : "Red Wins!";
-        } else if (window.networkingSystem) {
-          const local = window.networkingSystem.getLocalPlayerId();
-          msg.textContent = winner === local ? "You Win!" : "Opponent Wins!";
-        } else {
-          msg.textContent = winner === "player1" ? "Blue Wins!" : "Red Wins!";
+    if (document) {
+      const overlay = document.getElementById("gameOverOverlay");
+      if (overlay) {
+        const msg = document.getElementById("gameOverMessage");
+        if (msg) {
+          if (this.gameMode === "sandbox") {
+            msg.textContent = winner === "player1" ? "Blue Wins!" : "Red Wins!";
+          } else if (window.networkingSystem) {
+            const local = window.networkingSystem.getLocalPlayerId();
+            msg.textContent = winner === local ? "You Win!" : "Opponent Wins!";
+          } else {
+            msg.textContent = winner === "player1" ? "Blue Wins!" : "Red Wins!";
+          }
         }
+
+        this._populateMatchStats(winner);
+        overlay.style.display = "flex";
       }
-      overlay.style.display = "flex";
+    }
+  }
+
+  _populateMatchStats(winner) {
+    const _setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
+    const _setW    = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = pct; };
+
+    // Win condition
+    const heroKill = (winner === "player1" && this.hero2 && this.hero2.hp <= 0)
+                  || (winner === "player2" && this.hero1 && this.hero1.hp <= 0);
+    _setText("matchEndCondition", heroKill ? "Hero Slain" : "Map Control");
+
+    // Tile counts + bar
+    let p1Tiles = 0, p2Tiles = 0;
+    for (let r = 0; r < this.rows; r++)
+      for (let c = 0; c < this.cols; c++) {
+        const o = this.grid[r][c].owner;
+        if (o === "player1") p1Tiles++;
+        else if (o === "player2") p2Tiles++;
+      }
+    const total = this.rows * this.cols;
+    _setW("tileBarBlue", (p1Tiles / total * 100).toFixed(1) + "%");
+    _setW("tileBarRed",  (p2Tiles / total * 100).toFixed(1) + "%");
+    _setText("statTilesBlue", p1Tiles);
+    _setText("statTilesRed",  p2Tiles);
+
+    // Duration
+    const mins = Math.floor(this.matchTime / 60);
+    const secs = Math.floor(this.matchTime % 60);
+    _setText("matchDuration", mins + ":" + String(secs).padStart(2, "0"));
+
+    // matchStats rows
+    if (this.matchStats) {
+      const ms = this.matchStats;
+      _setText("statTroopsDeployedBlue",  ms.player1.troopsSpawned);
+      _setText("statTroopsDeployedRed",   ms.player2.troopsSpawned);
+      _setText("statTroopsKilledBlue",    ms.player1.troopsKilled);
+      _setText("statTroopsKilledRed",     ms.player2.troopsKilled);
+      _setText("statRpGeneratedBlue",     Math.round(ms.player1.rpGenerated));
+      _setText("statRpGeneratedRed",      Math.round(ms.player2.rpGenerated));
+      _setText("statRpSpentBlue",         Math.round(ms.player1.rpSpent));
+      _setText("statRpSpentRed",          Math.round(ms.player2.rpSpent));
+      _setText("statTpGeneratedBlue",     Math.round(ms.player1.tpGenerated));
+      _setText("statTpGeneratedRed",      Math.round(ms.player2.tpGenerated));
+      _setText("statTpSpentBlue",         Math.round(ms.player1.tpSpent));
+      _setText("statTpSpentRed",          Math.round(ms.player2.tpSpent));
+      _setText("statBuildingsPlacedBlue", ms.player1.buildingsPlaced);
+      _setText("statBuildingsPlacedRed",  ms.player2.buildingsPlaced);
+      _setText("statBuildingsDestrBlue",  ms.player1.buildingsDestroyed);
+      _setText("statBuildingsDestrRed",   ms.player2.buildingsDestroyed);
+      _setText("statTowersTakenBlue",     ms.player1.towersTaken);
+      _setText("statTowersTakenRed",      ms.player2.towersTaken);
+      _setText("statTowersLostBlue",      ms.player1.towersLost);
+      _setText("statTowersLostRed",       ms.player2.towersLost);
     }
   }
 
@@ -242,19 +318,19 @@ class GameState {
   applyPlayerAction(action, player) {
     if (!action || !action.kind) return;
     const setup = window.gameSetupResult;
-    if (!setup) return;
-    const ui = setup.uiState;
-    const ss = setup.strategemSystem;
+    const ga    = window.gameActions;
+    const gl    = setup?.gameLogic;
+    const ss    = setup?.strategemSystem;
 
     switch (action.kind) {
       case "spawnTroop":
-        if (ui) ui._trySpawnTroop(action.row, action.col, player, action.troopType);
+        if (ga && gl) ga.spawnTroop(this, gl, action.row, action.col, player, action.troopType);
         break;
       case "placeBuilding":
-        if (ui) ui._tryPlaceBuilding(action.row, action.col, player, action.buildingType);
+        if (ga && gl) ga.placeBuilding(this, gl, action.row, action.col, player, action.buildingType);
         break;
       case "placeStrategem":
-        if (ui) ui._commitStrategem(player, action.strategemType, action.params || {});
+        if (ga && gl && ss) ga.commitStrategem(this, gl, ss, player, action.strategemType, action.params || {});
         break;
       case "heroAbility":
         if (ss && ss.tryActivateHeroAbility) ss.tryActivateHeroAbility(player);

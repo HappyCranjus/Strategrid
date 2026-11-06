@@ -251,6 +251,16 @@ class BuildingSystem {
    * still has owner/row/col/width/height available.
    */
   _onBuildingDestroyed(b) {
+    const gs = this.gameState;
+    if (gs.matchStats) {
+      const opp = b.owner === "player1" ? "player2" : "player1";
+      gs.matchStats[opp].buildingsDestroyed++;
+      if (BuildingSystem.TOWER_TYPES.has(b.type)) {
+        gs.matchStats[opp].towersTaken++;
+        gs.matchStats[b.owner].towersLost++;
+      }
+    }
+
     if (b.type === "warBonesFactory") {
       const def = this.gameLogic.buildingTypes[b.type];
       const n = (def && def.deathSpawnCount) || 2;
@@ -269,7 +279,6 @@ class BuildingSystem {
     // side) with retained HP. They resume marching from there. Staggered by
     // row across the 1x2 footprint so they don't overlap on spawn.
     if (b.type === "bunker" && b.occupants && b.occupants.length > 0) {
-      const gs = this.gameState;
       const cols = gs.cols, rows = gs.rows;
       const colTarget = b.owner === "player1"
         ? b.col - 0.25
@@ -461,5 +470,9 @@ class BuildingSystem {
     }
   }
 }
+
+BuildingSystem.TOWER_TYPES = new Set([
+  "cannon", "chillTurret", "lavaMortar", "reaperTurret", "towerTurret",
+]);
 
 window.BuildingSystem = BuildingSystem;

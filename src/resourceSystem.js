@@ -74,6 +74,13 @@ class ResourceSystem {
       gs.currentTP[player] = Math.min((gs.currentTP[player] || 0) + tpRate * deltaTime, maxTP);
     }
 
+    if (gs.matchStats) {
+      for (const player of ["player1", "player2"]) {
+        gs.matchStats[player].rpGenerated += (rates[player]   || 0) * deltaTime;
+        gs.matchStats[player].tpGenerated += (tpRates[player] || 0) * deltaTime;
+      }
+    }
+
     if (am) {
       const newRP = gs.currentRP[localId];
       const newTP = gs.currentTP[localId];
@@ -94,6 +101,7 @@ class ResourceSystem {
   }
 
   renderHUD() {
+    if (!document) return;
     const gs = this.gameState;
     if (!gs) return;
 

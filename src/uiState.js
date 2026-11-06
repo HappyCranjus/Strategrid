@@ -159,49 +159,11 @@ class UIState {
     if (this._isRemoteClient()) {
       this._sendAction({ kind: "spawnTroop", row, col, troopType });
     }
-    const gs = this.gameState;
-    const elig = this.getSpawnEligibility(col, row, owner, troopType);
-    if (!elig.zoneOK || !elig.affordOK) return;
-
-    const troop = this.gameLogic.createTroop(troopType, row, col, owner);
-    if (!troop) return;
-
-    // Forward-of-turret spawns take 1.2s to activate; behind/at-turret spawns
-    // are immediate. Troop ignores movement/combat while !active (see troopSystem).
-    if (elig.instant) {
-      troop.active = true;
-      troop.activationTime = 0;
-      troop.activationDuration = 0;
-    } else {
-      troop.active = false;
-      troop.activationTime = 1.2;
-      troop.activationDuration = 1.2;
+    const ok = window.gameActions.spawnTroop(this.gameState, this.gameLogic, row, col, owner, troopType);
+    if (ok) {
+      const am = window.gameSetupResult?.audioManager;
+      if (am) am.playTroopSpawn({ type: troopType });
     }
-    // Settlers always use their full activation window regardless of spawn position.
-    if (troopType === "settler") {
-      troop.active = false;
-      troop.activationTime = 3.5;
-      troop.activationDuration = 3.5;
-    }
-
-    if (troopType === "ninja") {
-      const def = (this.gameLogic.troopTypes || {}).ninja || {};
-      const now = gs.matchTime || 0;  // matchTime is identical on both clients
-      troop.invisible    = true;
-      troop.cloakActive  = true;
-      troop.cloakedUntil = now + (def.spawnCloakDuration || 5.0);
-      // First attack MUST be a katana — suppress shurikens until she closes
-      // to melee and lands the opener. The opener also gets a +50% bonus
-      // (applied in troopSystem when the attack fires).
-      troop.firstAttackPending = true;
-    }
-
-    gs.currentRP[owner] -= (troop.cost || 0);
-    const tpCost = ((this.gameLogic.troopTypes || {})[troopType] || {}).tpCost || 0;
-    if (tpCost > 0) gs.currentTP[owner] -= tpCost;
-    gs.troops.push(troop);
-    const am = window.gameSetupResult && window.gameSetupResult.audioManager;
-    if (am) am.playTroopSpawn(troop);
   }
 
   /**
@@ -213,94 +175,15 @@ class UIState {
    *   frontier - the col of the forward-most owned towerTurret (null if none alive)
    */
   getSpawnEligibility(col, row, owner, troopType) {
-    const gs = this.gameState;
-    const inBounds =
-      Number.isInteger(col) && Number.isInteger(row) &&
-      col >= 0 && col < gs.cols && row >= 0 && row < gs.rows;
-    const tileOwner = inBounds ? gs.grid[row][col].owner : null;
-    // The Ninja's zone rule is inverted: she infiltrates the enemy's back
-    // column (col 0 for player2's rear, gs.cols-1 for player1's rear). All
-    // other troops deploy on tiles their owner controls via influence.
-    let zoneOK;
-    if (troopType === "ninja") {
-      const enemyBackCol = (owner === "player1") ? gs.cols - 1 : 0;
-      zoneOK = inBounds && col === enemyBackCol;
-    } else {
-      zoneOK = inBounds && tileOwner === owner;
-      if (zoneOK) {
-        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-        for (const [dr, dc] of dirs) {
-          const nr = row + dr, nc = col + dc;
-          if (nr < 0 || nr >= gs.rows || nc < 0 || nc >= gs.cols) { zoneOK = false; break; }
-          if (gs.grid[nr][nc].owner !== owner) { zoneOK = false; break; }
-        }
-      }
-    }
-
-    const def = (this.gameLogic.troopTypes || {})[troopType] || {};
-    const cost = def.cost || 0;
-    const tpCost = def.tpCost || 0;
-    const affordOK = (gs.currentRP[owner] || 0) >= cost
-                  && (gs.currentTP[owner] || 0) >= tpCost;
-
-    const frontier = this._turretFrontierCol(owner);
-    const instant = frontier !== null && (
-      owner === "player1" ? col <= frontier : col >= frontier
-    );
-
-    return { zoneOK, affordOK, instant, frontier };
-  }
-
-  /** Forward-most surviving towerTurret col for the given owner (null if none). */
-  _turretFrontierCol(owner) {
-    const gs = this.gameState;
-    let frontier = null;
-    for (const b of gs.buildings) {
-      if (b.type !== "towerTurret" || b.owner !== owner) continue;
-      if (frontier === null) frontier = b.col;
-      else if (owner === "player1") frontier = Math.max(frontier, b.col);
-      else frontier = Math.min(frontier, b.col);
-    }
-    return frontier;
+    return window.gameActions.checkSpawnLegality(this.gameState, this.gameLogic, col, row, owner, troopType);
   }
 
   _tryPlaceBuilding(row, col, owner, buildingType) {
     if (this._isRemoteClient()) {
       this._sendAction({ kind: "placeBuilding", row, col, buildingType });
     }
-    const gs = this.gameState;
-    // Enforce placement zones: player1 on left half, player2 on right half.
-    // Sandbox waives the restriction so the dev can place anywhere.
-    const midCol = Math.floor(gs.cols / 2);
-    if (gs.gameMode !== "sandbox") {
-      if (owner === "player1" && (col < 1 || col >= midCol)) return;
-      if (owner === "player2" && (col < midCol || col > gs.cols - 2)) return;
-    }
-
-    const building = this.gameLogic.createBuilding(buildingType, row, col, owner);
-    if (!building) return;
-
-    const def = this.gameLogic.buildingTypes[buildingType] || {};
-    const rpCost = building.cost || 0;
-    const tpCost = def.tpCost || 0;
-    if ((gs.currentRP[owner] || 0) < rpCost) return;
-    if ((gs.currentTP[owner] || 0) < tpCost) return;
-
-    // Check that all tiles in the footprint are empty
-    for (let r = row; r < row + building.height; r++) {
-      for (let c = col; c < col + building.width; c++) {
-        if (r >= gs.rows || c >= gs.cols) return;
-        const occupied = gs.buildings.some(
-          (b) => c >= b.col && c < b.col + b.width && r >= b.row && r < b.row + b.height
-        );
-        if (occupied) return;
-      }
-    }
-
-    gs.currentRP[owner] -= rpCost;
-    if (tpCost) gs.currentTP[owner] -= tpCost;
-    gs.buildings.push(building);
-    this.buildMode = null;
+    const ok = window.gameActions.placeBuilding(this.gameState, this.gameLogic, row, col, owner, buildingType);
+    if (ok) this.buildMode = null;
   }
 
   /**
@@ -365,14 +248,7 @@ class UIState {
    * the action shape.
    */
   _commitStrategem(owner, strategemType, params) {
-    const gs = this.gameState;
-    const def = (this.gameLogic.strategemTypes || {})[strategemType] || {};
-    const tpCost = def.tpCost || 0;
-    if ((gs.currentTP[owner] || 0) < tpCost) return;
-    if (def.cooldown != null && this.strategemSystem && !this.strategemSystem.isReady(owner, strategemType)) return;
-    const entity = this.strategemSystem.createStrategem(strategemType, params);
-    if (!entity) return;
-    gs.currentTP[owner] = Math.max(0, (gs.currentTP[owner] || 0) - tpCost);
+    window.gameActions.commitStrategem(this.gameState, this.gameLogic, this.strategemSystem, owner, strategemType, params);
   }
 
   /**

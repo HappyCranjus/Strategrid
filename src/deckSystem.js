@@ -321,12 +321,12 @@ class DeckSystem {
    * mode to give the AI a fresh deck per match.
    * @returns {Object}
    */
-  randomDeck() {
+  randomDeck(rng = Math.random.bind(Math)) {
     const pickN = (pool, n) => {
       const copy = [...pool];
       const out = [];
       for (let i = 0; i < n && copy.length > 0; i++) {
-        const idx = Math.floor(Math.random() * copy.length);
+        const idx = Math.floor(rng() * copy.length);
         out.push(copy.splice(idx, 1)[0]);
       }
       return out;
@@ -335,7 +335,7 @@ class DeckSystem {
       troops: pickN(this.availableTroops, 4),
       strategems: pickN(this.availableStrategems, 2),
       buildings: pickN(this.availableBuildings, 2),
-      hero: this.availableHeroes[Math.floor(Math.random() * this.availableHeroes.length)],
+      hero: this.availableHeroes[Math.floor(rng() * this.availableHeroes.length)],
     };
   }
 

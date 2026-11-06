@@ -222,6 +222,10 @@ class TroopSystem {
         }
         // Log the death so strategemSystem.Necromancy can react this frame.
         if (gs.deathsThisFrame) gs.deathsThisFrame.push(troop);
+        if (gs.matchStats) {
+          const killer = troop.owner === "player1" ? "player2" : "player1";
+          gs.matchStats[killer].troopsKilled++;
+        }
         gs.troops.splice(i, 1);
         continue;
       }

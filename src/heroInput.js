@@ -97,7 +97,11 @@ class HeroInput {
     if (mode === "pvp") {
       const vec = this._combine(this._readWASD(), this._readArrows());
       this._driveHero(localId, vec, deltaTime);
+    } else if (mode === "pvc") {
+      // Human controls only P1; P2 is AI-owned
+      this._driveHero("player1", this._combine(this._readWASD(), this._readArrows()), deltaTime);
     } else {
+      // Sandbox: WASD drives P1, arrows drive P2 (dev convenience)
       this._driveHero("player1", this._readWASD(),   deltaTime);
       this._driveHero("player2", this._readArrows(), deltaTime);
     }
