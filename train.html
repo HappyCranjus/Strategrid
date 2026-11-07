@@ -232,6 +232,7 @@
         <button class="ctrl-btn" id="startBtn">▶ Start</button>
         <button class="ctrl-btn" id="pauseBtn" disabled>⏸ Pause</button>
         <button class="ctrl-btn" id="resetLearningBtn">↺ Reset Learning</button>
+        <button class="ctrl-btn" id="clearSaveBtn" title="Delete saved progress from localStorage">🗑 Clear Save</button>
 
         <div id="speedWrap">
           <span>Speed</span>
@@ -255,6 +256,9 @@
         <div class="metric-row"><span>Red win rate</span><span id="metRedWR"  class="red">—</span></div>
         <div class="metric-row"><span>Last winner</span><span id="metLast">—</span></div>
         <div class="metric-row"><span>Game time</span><span id="metGameTime">0s</span></div>
+        <div class="metric-row" style="margin-top:6px; font-size:0.75rem; color:#555;">
+          <span id="saveStatus">No save found</span>
+        </div>
       </div>
 
       <div class="panel-box">
@@ -297,7 +301,7 @@
 <script src="src/heroInput.js?v=10"></script>
 <script src="src/gameLoop.js?v=9"></script>
 <script src="src/gameSetup.js?v=6"></script>
-<script src="src/trainBot.js?v=2"></script>
+<script src="src/trainBot.js?v=3"></script>
 
 <script>
 // ── Speed mapping ────────────────────────────────────────────────────────────
@@ -314,6 +318,52 @@ let winHistory  = [];    // 1=blue, 0=red per episode
 let lastHeatmap1 = [];
 let lastHeatmap2 = [];
 let speed = SPEEDS[2];   // default 5x
+
+const STORAGE_KEY = "strategrid_training_v1";
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      episodeCount,
+      winHistory: winHistory.slice(-200), // keep last 200
+      bot1: bot1.save(),
+      bot2: bot2.save(),
+      savedAt: Date.now(),
+    }));
+    updateSaveStatus();
+  } catch (e) {
+    console.warn("Save failed:", e);
+  }
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    episodeCount = data.episodeCount || 0;
+    winHistory   = data.winHistory   || [];
+    bot1.load(data.bot1);
+    bot2.load(data.bot2);
+    updateSaveStatus(data.savedAt);
+    return true;
+  } catch (e) {
+    console.warn("Load failed:", e);
+    return false;
+  }
+}
+
+function updateSaveStatus(savedAt) {
+  const el = document.getElementById("saveStatus");
+  if (!el) return;
+  const existing = savedAt || (() => {
+    try { const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); return d.savedAt; } catch { return null; }
+  })();
+  if (!existing) { el.textContent = "No save found"; return; }
+  const mins = Math.round((Date.now() - existing) / 60000);
+  const ago  = mins < 2 ? "just now" : mins < 60 ? `${mins}m ago` : `${Math.round(mins/60)}h ago`;
+  el.textContent = `Saved ${ago} · ${episodeCount} episodes`;
+}
 
 const DT = 1 / 30;
 
@@ -384,6 +434,9 @@ async function init() {
   bot1 = new TrainBot("player1");
   bot2 = new TrainBot("player2");
 
+  // Resume from last session if a save exists.
+  const resumed = loadProgress();
+
   resetGame();
 
   statusBadge.textContent = "Ready";
@@ -395,6 +448,12 @@ async function init() {
   drawHeatmap();
   updateWeightBars("weightBars",  bot1.weights);
   updateWeightBars("weightBars2", bot2.weights);
+  updateSaveStatus();
+  if (resumed) {
+    statusBadge.textContent = `Resumed · ${episodeCount} ep`;
+    drawChart();
+    updateMetrics(window.gameSetupResult.gameState);
+  }
 
   // Start the loop (but paused)
   raf = requestAnimationFrame(loop);
@@ -453,6 +512,11 @@ function loop() {
       updateWeightBars("weightBars",  bot1.weights);
       updateWeightBars("weightBars2", bot2.weights);
       drawChart();
+
+      // Auto-save every 10 episodes.
+      if (episodeCount % 10 === 0) {
+        saveProgress();
+      }
 
       resetGame();
       break; // start fresh on the next animation frame
@@ -597,12 +661,14 @@ pauseBtn.addEventListener("click", () => {
 });
 
 resetLearningBtn.addEventListener("click", () => {
+  if (!confirm("Reset all learning progress? The current save will also be cleared.")) return;
   const wasRunning = running;
   running = false;
   bot1 = new TrainBot("player1");
   bot2 = new TrainBot("player2");
   episodeCount = 0;
   winHistory = [];
+  localStorage.removeItem(STORAGE_KEY);
   lastHeatmap1 = [];
   lastHeatmap2 = [];
   resetGame();
@@ -617,6 +683,7 @@ resetLearningBtn.addEventListener("click", () => {
   metLast.textContent = "—";
   statusBadge.textContent = "Reset";
   statusBadge.className = "";
+  updateSaveStatus();
   startBtn.textContent = "▶ Start";
   startBtn.classList.remove("running");
   if (wasRunning) {
@@ -626,6 +693,12 @@ resetLearningBtn.addEventListener("click", () => {
     statusBadge.textContent = "Running";
     statusBadge.className = "running";
   }
+});
+
+document.getElementById("clearSaveBtn").addEventListener("click", () => {
+  if (!confirm("Delete saved training progress? This cannot be undone.")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  updateSaveStatus();
 });
 
 speedSlider.addEventListener("input", () => {

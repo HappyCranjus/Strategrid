@@ -363,6 +363,44 @@ class TrainBot {
     return tiles.length ? tiles[Math.floor(Math.random() * tiles.length)] : null;
   }
 
+  // ── Persistence ───────────────────────────────────────────────────────────
+
+  save() {
+    const rows = this._qTable ? this._qTable.length : 0;
+    const cols = rows > 0 ? this._qTable[0].length : 0;
+    const flatQ = [], flatV = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        flatQ.push(this._qTable[r][c]);
+        flatV.push(this._visits ? this._visits[r][c] : 0);
+      }
+    }
+    return {
+      weights:        { ...this.weights },
+      qTable:         flatQ,
+      visits:         flatV,
+      rows, cols,
+      totalVisits:    this._totalVis   || 0,
+      episodeCount:   this._episodeCount,
+      recentOutcomes: [...this._recentOutcomes],
+    };
+  }
+
+  load(state) {
+    if (!state) return;
+    this.weights          = { ...state.weights };
+    this._totalVis        = state.totalVisits   || 0;
+    this._episodeCount    = state.episodeCount  || 0;
+    this._recentOutcomes  = state.recentOutcomes || [];
+    const { rows, cols, qTable, visits } = state;
+    if (rows && cols && qTable) {
+      this._qTable  = Array.from({ length: rows }, (_, r) =>
+        new Float32Array(qTable.slice(r * cols, (r + 1) * cols)));
+      this._visits  = Array.from({ length: rows }, (_, r) =>
+        new Uint32Array((visits || []).slice(r * cols, (r + 1) * cols)));
+    }
+  }
+
   // ── Accessors for the UI ──────────────────────────────────────────────────
 
   get winRate() {
