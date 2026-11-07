@@ -542,13 +542,12 @@ function resetGame() {
   window.gameSetupResult.gameState = gs;
 
   gs.initialize(); // calls deckSystem.resetMatchState() + spawns heroes
-  result.buildingSystem.placeInitialTurrets(); // matches PvC/PvP starting layout
 
   // Assign fresh random decks for training variety
   window.deckSystem.playerDecks.player1 = window.deckSystem.randomDeck();
   window.deckSystem.playerDecks.player2 = window.deckSystem.randomDeck();
 
-  // Re-inject into all stateful systems
+  // Re-inject into all stateful systems BEFORE placing turrets so they land on gs.
   troopSystem.gameState      = gs;
   buildingSystem.gameState   = gs;
   strategemSystem.gameState  = gs;
@@ -556,6 +555,7 @@ function resetGame() {
   phaseSystem.gameState      = gs;
   resourceSystem.gameState   = gs;
   result.heroInput.gameState = gs;
+  result.buildingSystem.placeInitialTurrets(); // must be after gameState reinject
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
