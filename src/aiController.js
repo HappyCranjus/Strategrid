@@ -162,7 +162,14 @@ class AIController {
     }
     if (!tiles.length) return null;
 
-    // If trained Q-values exist, rank tiles by learned win correlation.
+    // Neural network takes priority when weights are loaded.
+    const nn = window.nnBot;
+    if (nn && nn._loaded) {
+      const tile = nn.pickSpawnTile(gs, this.owner, this.gameLogic, this.deckSystem);
+      if (tile) return tile;
+    }
+
+    // Fallback: Q-value bandit from localStorage training session.
     const td = this._trained;
     if (td && td.qTable && td.rows && td.cols) {
       const { qTable, rows, cols } = td;
