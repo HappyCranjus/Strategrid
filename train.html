@@ -246,6 +246,9 @@
         <button class="ctrl-btn" id="startBtn">▶ Start</button>
         <button class="ctrl-btn" id="pauseBtn" disabled>⏸ Pause</button>
         <button class="ctrl-btn" id="resetLearningBtn">↺ Reset Learning</button>
+        <button class="ctrl-btn" id="exportBtn" title="Download trained AI as JSON file">⬇ Export AI</button>
+        <button class="ctrl-btn" id="importBtn" title="Load trained AI from JSON file">⬆ Import AI</button>
+        <input type="file" id="importFile" accept=".json" style="display:none">
         <button class="ctrl-btn" id="clearSaveBtn" title="Delete saved progress from localStorage">🗑 Clear Save</button>
 
         <div id="speedWrap">
@@ -764,6 +767,48 @@ resetLearningBtn.addEventListener("click", () => {
     statusBadge.textContent = "Running";
     statusBadge.className = "running";
   }
+});
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const data = localStorage.getItem(STORAGE_KEY);
+  if (!data) { alert("No training data to export yet — run some episodes first."); return; }
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `strategrid-ai-${episodeCount}ep.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("importBtn").addEventListener("click", () => {
+  document.getElementById("importFile").click();
+});
+
+document.getElementById("importFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      // Reload into live bots without resetting game.
+      bot1.load(data.bot1);
+      bot2.load(data.bot2);
+      episodeCount = data.episodeCount || 0;
+      winHistory   = data.winHistory   || [];
+      updateSaveStatus(data.savedAt);
+      updateWeightBars("weightBars",  bot1.weights);
+      updateWeightBars("weightBars2", bot2.weights);
+      updatePolicyDisplay(bot1, bot2);
+      drawChart();
+      alert(`Loaded: ${episodeCount} episodes.`);
+    } catch (err) {
+      alert("Import failed — not a valid training file.\n" + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
 });
 
 document.getElementById("clearSaveBtn").addEventListener("click", () => {

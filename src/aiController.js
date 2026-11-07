@@ -37,6 +37,20 @@ class AIController {
     this.owner = "player2";
     this.lastPhase = null;
     this.campaign = null; // { troopType, rate, remainingDur, accum }
+
+    // Load trained data from localStorage (written by train.html).
+    // If present, spawn decisions and hero policy use the learned Q-values.
+    this._trained = this._loadTrainedData();
+  }
+
+  _loadTrainedData() {
+    try {
+      const raw = localStorage.getItem("strategrid_training_v1");
+      if (!raw) return null;
+      const save = JSON.parse(raw);
+      // Training always runs player2 as Red; use bot2's save.
+      return save.bot2 || null;
+    } catch (e) { return null; }
   }
 
   _randInt(lo, hi) { return lo + Math.floor(this.rng() * (hi - lo + 1)); }
@@ -146,8 +160,22 @@ class AIController {
         if (gs.grid[r][c].owner === this.owner) tiles.push({ row: r, col: c });
       }
     }
-    if (tiles.length === 0) return null;
-    // Bias toward frontline: 60% chance to pick from the most-forward 30% of tiles
+    if (!tiles.length) return null;
+
+    // If trained Q-values exist, rank tiles by learned win correlation.
+    const td = this._trained;
+    if (td && td.qTable && td.rows && td.cols) {
+      const { qTable, rows, cols } = td;
+      tiles.sort((a, b) => {
+        const qa = (a.row < rows && a.col < cols) ? (qTable[a.row * cols + a.col] || 0) : 0;
+        const qb = (b.row < rows && b.col < cols) ? (qTable[b.row * cols + b.col] || 0) : 0;
+        return qb - qa;
+      });
+      // Pick from top 3 so the AI isn't completely deterministic.
+      return tiles[Math.floor(this.rng() * Math.min(3, tiles.length))];
+    }
+
+    // Untrained fallback: frontline bias.
     tiles.sort((a, b) => this.owner === "player1" ? b.col - a.col : a.col - b.col);
     if (this.rng() < 0.6) {
       const frontN = Math.max(1, Math.ceil(tiles.length * 0.3));
@@ -236,14 +264,25 @@ class AIController {
 
     const hpFrac = hero.maxHp ? hero.hp / hero.maxHp : 1;
 
-    // Rule-based policy selection:
-    //   - critically low HP → always retreat
-    //   - endgame → hunt the opponent hero directly
-    //   - otherwise → pressure the weakest enemy tower
+    // Policy selection: use trained policy Q-values if available,
+    // otherwise fall back to rule-based heuristic.
     let policyKey;
-    if (hpFrac < 0.25)                policyKey = "retreat";
-    else if (gs.phase === "endgame")  policyKey = "targetHero";
-    else                              policyKey = "targetWeakestTower";
+    if (hpFrac < 0.25) {
+      policyKey = "retreat"; // safety override always wins
+    } else {
+      const td = this._trained;
+      if (td && td.policyQ && td.policyQ.length > 0) {
+        const keys = window.HeroPolicies.KEYS;
+        let bestIdx = 0, bestQ = -Infinity;
+        for (let i = 0; i < Math.min(td.policyQ.length, keys.length); i++) {
+          if ((td.policyQ[i] || 0) > bestQ) { bestQ = td.policyQ[i]; bestIdx = i; }
+        }
+        policyKey = keys[bestIdx];
+      } else {
+        // Untrained heuristic: pressure towers mid-game, hunt hero in endgame.
+        policyKey = gs.phase === "endgame" ? "targetHero" : "targetWeakestTower";
+      }
+    }
 
     const target = hp[policyKey](gs, this.owner, hero);
     if (!target) return;
