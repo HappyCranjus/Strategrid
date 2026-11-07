@@ -28,6 +28,13 @@ class TrainBot {
     // Spawn positions chosen this episode, used for Q-value update.
     this._episodeSpawns = [];
 
+    // Hero policy bandit — 6-arm UCB1 over HeroPolicies.KEYS.
+    this._policyQ       = new Float32Array(6).fill(0);
+    this._policyVisits  = new Uint32Array(6).fill(0);
+    this._totalPolicyVis = 0;
+    this._activePolicyIdx = 0;
+    this._activePolicy    = "targetHero"; // default until first selectPolicy()
+
     // Rolling win history for weight evolution.
     this._recentOutcomes = []; // 1 = win, 0 = loss
     this._episodeCount   = 0;
@@ -172,10 +179,20 @@ class TrainBot {
     const reward = won ? 1 : -1;
     const lr     = 0.12; // learning rate
 
+    // Update tile Q-values.
     for (const { row, col } of this._episodeSpawns) {
       this._qTable[row][col] = this._qTable[row][col] * (1 - lr) + reward * lr;
     }
     this._episodeSpawns = [];
+
+    // Update policy Q-value for the policy used this episode.
+    const idx = this._activePolicyIdx;
+    this._policyQ[idx]      = this._policyQ[idx] * (1 - lr) + reward * lr;
+    this._policyVisits[idx] = (this._policyVisits[idx] || 0) + 1;
+    this._totalPolicyVis++;
+
+    // Select policy for NEXT episode via UCB1.
+    this._selectPolicy();
 
     this._recentOutcomes.push(won ? 1 : 0);
     if (this._recentOutcomes.length > 20) this._recentOutcomes.shift();
@@ -203,6 +220,23 @@ class TrainBot {
     for (const k of keys) this.weights[k] /= total;
   }
 
+  // ── Hero policy bandit ────────────────────────────────────────────────────
+
+  /** UCB1 over the 6 policy arms; call once per episode start. */
+  _selectPolicy() {
+    const keys = window.HeroPolicies ? window.HeroPolicies.KEYS : ["targetHero"];
+    const C = 1.4;
+    const logTotal = Math.log(this._totalPolicyVis + 1);
+    let bestIdx = 0, bestScore = -Infinity;
+    for (let i = 0; i < keys.length; i++) {
+      const q = this._policyQ[i] || 0, n = this._policyVisits[i] || 0;
+      const score = q + C * Math.sqrt(logTotal / (n + 1));
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    this._activePolicyIdx = bestIdx;
+    this._activePolicy    = keys[bestIdx];
+  }
+
   // ── Hero movement ─────────────────────────────────────────────────────────
 
   _moveHero(gs, dt) {
@@ -210,39 +244,15 @@ class TrainBot {
     if (!hero || hero.hp <= 0) return;
 
     const hpFrac = hero.maxHp ? hero.hp / hero.maxHp : 1;
+    // Safety override: always retreat when critically low regardless of active policy.
+    const policyKey = hpFrac < 0.25 ? "retreat" : (this._activePolicy || "targetHero");
 
-    // Retreat to safe column when critically low on HP.
-    if (hpFrac < 0.25) {
-      const safeCol = this.player === "player1" ? 1.5 : gs.cols - 2.5;
-      const dxR = safeCol - hero.col;
-      if (Math.abs(dxR) > 0.5) {
-        const step = (hero.speed || 0) * dt;
-        hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + Math.sign(dxR) * step));
-        hero.target = null;
-      }
-      return;
-    }
+    const hp = window.HeroPolicies;
+    if (!hp || !hp[policyKey]) return;
+    const target = hp[policyKey](gs, this.player, hero);
+    if (!target) return; // stayStill or no valid target found
 
-    // Engage: move toward the nearest enemy troop or building.
-    let targetCol = this.player === "player1" ? gs.cols * 0.65 : gs.cols * 0.35;
-    let targetRow = hero.row;
-    let nearestDist = Infinity;
-
-    for (const t of gs.troops) {
-      if (!t || t.hp <= 0 || t.owner === this.player || t.invisible) continue;
-      const dx = t.col - hero.col, dy = t.row - hero.row;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < nearestDist) { nearestDist = d2; targetCol = t.col; targetRow = t.row; }
-    }
-    // Also consider enemy buildings as targets.
-    for (const b of gs.buildings) {
-      if (!b || b.owner === this.player) continue;
-      const dx = b.col - hero.col, dy = b.row - hero.row;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < nearestDist) { nearestDist = d2; targetCol = b.col; targetRow = b.row; }
-    }
-
-    const dxR = targetCol - hero.col, dyR = targetRow - hero.row;
+    const dxR = target.targetCol - hero.col, dyR = target.targetRow - hero.row;
     const len = Math.sqrt(dxR * dxR + dyR * dyR);
     if (len < 0.5) return;
     const step = (hero.speed || 0) * dt;
@@ -383,6 +393,10 @@ class TrainBot {
       totalVisits:    this._totalVis   || 0,
       episodeCount:   this._episodeCount,
       recentOutcomes: [...this._recentOutcomes],
+      policyQ:        Array.from(this._policyQ),
+      policyVisits:   Array.from(this._policyVisits),
+      totalPolicyVis: this._totalPolicyVis,
+      activePolicyIdx: this._activePolicyIdx,
     };
   }
 
@@ -398,6 +412,14 @@ class TrainBot {
         new Float32Array(qTable.slice(r * cols, (r + 1) * cols)));
       this._visits  = Array.from({ length: rows }, (_, r) =>
         new Uint32Array((visits || []).slice(r * cols, (r + 1) * cols)));
+    }
+    if (state.policyQ) {
+      this._policyQ        = new Float32Array(state.policyQ);
+      this._policyVisits   = new Uint32Array(state.policyVisits || []);
+      this._totalPolicyVis = state.totalPolicyVis || 0;
+      this._activePolicyIdx = state.activePolicyIdx || 0;
+      const keys = window.HeroPolicies ? window.HeroPolicies.KEYS : ["targetHero"];
+      this._activePolicy = keys[this._activePolicyIdx] || "targetHero";
     }
   }
 

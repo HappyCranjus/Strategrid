@@ -231,39 +231,24 @@ class AIController {
     const hero = this.owner === "player1" ? gs.hero1 : gs.hero2;
     if (!hero || hero.hp <= 0) return;
 
+    const hp = window.HeroPolicies;
+    if (!hp) return;
+
     const hpFrac = hero.maxHp ? hero.hp / hero.maxHp : 1;
 
-    // Retreat when critically low on HP — avoids suicidal charges.
-    if (hpFrac < 0.25) {
-      const safeCol = this.owner === "player1" ? 1.5 : gs.cols - 2.5;
-      const dxR = safeCol - hero.col;
-      if (Math.abs(dxR) > 0.5) {
-        const step = (hero.speed || 0) * dt;
-        hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + Math.sign(dxR) * step));
-        hero.target = null;
-      }
-      return;
-    }
+    // Rule-based policy selection:
+    //   - critically low HP → always retreat
+    //   - endgame → hunt the opponent hero directly
+    //   - otherwise → pressure the weakest enemy tower
+    let policyKey;
+    if (hpFrac < 0.25)                policyKey = "retreat";
+    else if (gs.phase === "endgame")  policyKey = "targetHero";
+    else                              policyKey = "targetWeakestTower";
 
-    // Engage: move toward the nearest visible enemy troop or building.
-    let targetCol = this.owner === "player1" ? gs.cols * 0.65 : gs.cols * 0.35;
-    let targetRow = hero.row;
-    let nearestDist = Infinity;
+    const target = hp[policyKey](gs, this.owner, hero);
+    if (!target) return;
 
-    for (const t of gs.troops) {
-      if (!t || t.hp <= 0 || t.owner === this.owner || t.invisible) continue;
-      const dx = t.col - hero.col, dy = t.row - hero.row;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < nearestDist) { nearestDist = d2; targetCol = t.col; targetRow = t.row; }
-    }
-    for (const b of gs.buildings) {
-      if (!b || b.owner === this.owner) continue;
-      const dx = b.col - hero.col, dy = b.row - hero.row;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < nearestDist) { nearestDist = d2; targetCol = b.col; targetRow = b.row; }
-    }
-
-    const dxRaw = targetCol - hero.col, dyRaw = targetRow - hero.row;
+    const dxRaw = target.targetCol - hero.col, dyRaw = target.targetRow - hero.row;
     const len   = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
     if (len < 0.5) return;
     const step = (hero.speed || 0) * dt;

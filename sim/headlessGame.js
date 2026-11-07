@@ -46,6 +46,7 @@ function createGame(config = {}, seed = 1) {
 
   gs.setGameMode(config.gameMode || 'pvc');
   gs.initialize();
+  buildingSystem.placeInitialTurrets(); // matches game.js startPvC() / startSandbox()
 
   return {
     gs, gl, ds, rng, _gsr,
