@@ -41,6 +41,7 @@
     <button class="menu-btn" id="btnPvPRoomCode" style="border-left:4px solid #00ced1;">PvP (Room Code)</button>
     <button class="menu-btn" id="btnPvPOpen"     style="border-left:4px solid #00ced1;">PvP (Open Matchmaking)</button>
     <button class="menu-btn" id="btnPvC"         style="border-left:4px solid #4caf50;">Play vs Computer</button>
+    <button class="menu-btn" id="btnTrainAI"     style="border-left:4px solid #c060ff;">Train AI</button>
     <button class="menu-btn" id="btnSandbox"     style="border-left:4px solid #888; opacity:0.75;">Sandbox (Dev)</button>
     <button class="menu-btn" id="btnHowToPlay"   style="border-left:4px solid #f5c518;">How to Play</button>
     <button class="menu-btn" id="btnSettings"    style="border-left:4px solid #888;">&#9881; Settings</button>
@@ -513,6 +514,7 @@
       document.getElementById("btnPvPOpen").addEventListener("click",     () => { window.location.href = "game.html?mode=pvp&type=matchmaking"; });
       document.getElementById("btnSandbox").addEventListener("click",     () => { window.location.href = "game.html?mode=sandbox"; });
       document.getElementById("btnPvC").addEventListener("click",         () => { window.location.href = "game.html?mode=pvc"; });
+      document.getElementById("btnTrainAI").addEventListener("click",     () => { window.location.href = "train.html"; });
 
       // ── Modal open/close ─────────────────────────────────────────
       function openOverlay(id)  { document.getElementById(id).classList.remove("hidden"); }

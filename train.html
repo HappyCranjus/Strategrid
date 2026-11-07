@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Strategrid — AI Trainer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111'/><rect x='2' y='2' width='13' height='13' fill='%233399ff'/><rect x='17' y='2' width='13' height='13' fill='%23ff4444'/><rect x='2' y='17' width='13' height='13' fill='%233399ff'/><rect x='17' y='17' width='13' height='13' fill='%23ff4444'/></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html {
+      width: 100%; height: 100%;
+      background: #111;
+      font-family: 'Barlow', sans-serif;
+      color: #ccc;
+      overflow: hidden;
+    }
+    #train-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 10px;
+      gap: 8px;
+    }
+    #train-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #train-header h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #c060ff, #aaa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    #train-header .subtitle {
+      font-size: 0.85rem;
+      color: #555;
+    }
+    #train-header a {
+      margin-left: auto;
+      font-size: 0.85rem;
+      color: #555;
+      text-decoration: none;
+    }
+    #train-header a:hover { color: #aaa; }
+
+    #train-body {
+      display: flex;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Left: game canvas ───────────────────────────────────────────────── */
+    #train-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #canvasWrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    #trainCanvas {
+      display: block;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+    }
+    #heatmapCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+      border-radius: 4px;
+    }
+
+    #train-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ctrl-btn {
+      padding: 6px 16px;
+      font-family: 'Barlow', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #222;
+      color: #ccc;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .ctrl-btn:hover { background: #2e2e2e; }
+    .ctrl-btn.active { background: #3a2a4a; border-color: #c060ff; color: #c060ff; }
+    .ctrl-btn#startBtn.running { background: #2a3a2a; border-color: #4caf50; color: #4caf50; }
+
+    #speedWrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: #666;
+    }
+    #speedSlider {
+      width: 100px;
+      accent-color: #c060ff;
+    }
+    #speedLabel {
+      min-width: 36px;
+      color: #c060ff;
+      font-weight: 600;
+    }
+    .legend-row {
+      display: flex;
+      gap: 14px;
+      font-size: 0.75rem;
+      color: #555;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      margin-right: 4px;
+    }
+
+    /* ── Right: metrics panel ────────────────────────────────────────────── */
+    #train-right {
+      width: 280px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .panel-box {
+      background: #181818;
+      border: 1px solid #252525;
+      border-radius: 6px;
+      padding: 12px 14px;
+    }
+    .panel-box h3 {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #222;
+      padding-bottom: 6px;
+    }
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      padding: 3px 0;
+    }
+    .metric-row span:last-child {
+      font-weight: 600;
+      color: #ddd;
+    }
+    .metric-row .blue { color: #6bb8ff; }
+    .metric-row .red  { color: #ff7777; }
+
+    #chartCanvas {
+      display: block;
+      width: 100%;
+      border-radius: 4px;
+      background: #111;
+    }
+
+    /* Weight bars */
+    .weight-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: #777;
+      margin-bottom: 3px;
+    }
+    .weight-track {
+      height: 8px;
+      background: #222;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .weight-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: #c060ff;
+      transition: width 0.6s ease;
+    }
+
+    /* Status badge */
+    #statusBadge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #222;
+      border: 1px solid #444;
+      color: #666;
+    }
+    #statusBadge.running { background: #1a2a1a; border-color: #4caf50; color: #4caf50; }
+    #statusBadge.paused  { background: #2a2a1a; border-color: #c0a020; color: #c0a020; }
+  </style>
+</head>
+<body>
+<div id="train-wrap">
+  <!-- Header -->
+  <div id="train-header">
+    <h1>AI Trainer</h1>
+    <span class="subtitle">Self-play Q-learning</span>
+    <span id="statusBadge">Initializing…</span>
+    <a href="menu.html">← Menu</a>
+  </div>
+
+  <!-- Main body -->
+  <div id="train-body">
+    <!-- Left: canvas -->
+    <div id="train-left">
+      <div id="canvasWrap">
+        <canvas id="trainCanvas" width="700" height="600"></canvas>
+        <canvas id="heatmapCanvas" width="700" height="600"></canvas>
+      </div>
+
+      <div id="train-controls">
+        <button class="ctrl-btn" id="startBtn">▶ Start</button>
+        <button class="ctrl-btn" id="pauseBtn" disabled>⏸ Pause</button>
+        <button class="ctrl-btn" id="resetLearningBtn">↺ Reset Learning</button>
+
+        <div id="speedWrap">
+          <span>Speed</span>
+          <input type="range" id="speedSlider" min="0" max="5" value="2">
+          <span id="speedLabel">5×</span>
+        </div>
+        <div class="legend-row">
+          <span><span class="legend-dot" style="background:rgba(80,220,80,0.7)"></span>Good tile</span>
+          <span><span class="legend-dot" style="background:rgba(220,60,60,0.7)"></span>Bad tile</span>
+          <span><span class="legend-dot" style="background:rgba(255,230,0,0.9); border:2px solid #fff;"></span>Chosen</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: metrics -->
+    <div id="train-right">
+      <div class="panel-box">
+        <h3>Training Progress</h3>
+        <div class="metric-row"><span>Episodes</span><span id="metEpisodes">0</span></div>
+        <div class="metric-row"><span>Blue win rate</span><span id="metBlueWR" class="blue">—</span></div>
+        <div class="metric-row"><span>Red win rate</span><span id="metRedWR"  class="red">—</span></div>
+        <div class="metric-row"><span>Last winner</span><span id="metLast">—</span></div>
+        <div class="metric-row"><span>Game time</span><span id="metGameTime">0s</span></div>
+      </div>
+
+      <div class="panel-box">
+        <h3>Win Rate (last 50 episodes)</h3>
+        <canvas id="chartCanvas" width="252" height="80"></canvas>
+      </div>
+
+      <div class="panel-box" id="weightsPanel">
+        <h3>Blue — Learned Weights</h3>
+        <div id="weightBars"></div>
+      </div>
+
+      <div class="panel-box" id="weightsPanel2">
+        <h3>Red — Learned Weights</h3>
+        <div id="weightBars2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Game engine scripts (same load order as game.html, minus networking/lockstep/game.js) -->
+<script src="src/audioManager.js?v=2"></script>
+<script src="src/gameLogic.js?v=10"></script>
+<script src="src/gameActions.js?v=1"></script>
+<script src="src/gameState.js?v=12"></script>
+<script src="src/deckSystem.js?v=3"></script>
+<script src="src/influenceSystem.js?v=3"></script>
+<script src="src/phaseSystem.js?v=1"></script>
+<script src="src/resourceSystem.js?v=6"></script>
+<script src="src/troopSystem.js?v=16"></script>
+<script src="src/buildingSystem.js?v=7"></script>
+<script src="src/strategemSystem.js?v=4"></script>
+<script src="src/settings.js?v=1"></script>
+<script src="src/renderer.js?v=20"></script>
+<script src="src/uiState.js?v=8"></script>
+<script src="src/seededRandom.js?v=1"></script>
+<script src="src/heroInput.js?v=10"></script>
+<script src="src/gameLoop.js?v=9"></script>
+<script src="src/gameSetup.js?v=6"></script>
+<script src="src/trainBot.js?v=1"></script>
+
+<script>
+// ── Speed mapping ────────────────────────────────────────────────────────────
+const SPEEDS = [1, 2, 5, 10, 20, 50];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let result      = null;  // GameSetup result
+let bot1        = null;
+let bot2        = null;
+let running     = false;
+let raf         = null;
+let episodeCount = 0;
+let winHistory  = [];    // 1=blue, 0=red per episode
+let lastHeatmap1 = [];
+let lastHeatmap2 = [];
+let speed = SPEEDS[2];   // default 5x
+
+const DT = 1 / 30;
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const trainCanvas   = document.getElementById("trainCanvas");
+const heatmapCanvas = document.getElementById("heatmapCanvas");
+const hCtx          = heatmapCanvas.getContext("2d");
+const chartCanvas   = document.getElementById("chartCanvas");
+const cCtx          = chartCanvas.getContext("2d");
+
+const startBtn          = document.getElementById("startBtn");
+const pauseBtn          = document.getElementById("pauseBtn");
+const resetLearningBtn  = document.getElementById("resetLearningBtn");
+const speedSlider       = document.getElementById("speedSlider");
+const speedLabel        = document.getElementById("speedLabel");
+const statusBadge       = document.getElementById("statusBadge");
+
+// ── Metric elements ──────────────────────────────────────────────────────────
+const metEpisodes = document.getElementById("metEpisodes");
+const metBlueWR   = document.getElementById("metBlueWR");
+const metRedWR    = document.getElementById("metRedWR");
+const metLast     = document.getElementById("metLast");
+const metGameTime = document.getElementById("metGameTime");
+
+// ── Weight bars setup ─────────────────────────────────────────────────────────
+const WEIGHT_KEYS   = ["heroHp", "tiles", "resources", "mass", "front"];
+const WEIGHT_LABELS = { heroHp: "Hero HP", tiles: "Tile Control", resources: "Resources", mass: "Troop Mass", front: "Frontline" };
+
+function buildWeightBars(containerId) {
+  const container = document.getElementById(containerId);
+  for (const k of WEIGHT_KEYS) {
+    const label = document.createElement("div");
+    label.className = "weight-label";
+    label.innerHTML = `<span>${WEIGHT_LABELS[k]}</span><span id="${containerId}_${k}_val">25%</span>`;
+    const track = document.createElement("div");
+    track.className = "weight-track";
+    const fill = document.createElement("div");
+    fill.className = "weight-fill";
+    fill.id = `${containerId}_${k}_fill`;
+    fill.style.width = "25%";
+    track.appendChild(fill);
+    container.appendChild(label);
+    container.appendChild(track);
+  }
+}
+buildWeightBars("weightBars");
+buildWeightBars("weightBars2");
+
+function updateWeightBars(containerId, weights) {
+  for (const k of WEIGHT_KEYS) {
+    const pct = (weights[k] * 100).toFixed(0) + "%";
+    const fillW = (weights[k] / 0.55 * 100).toFixed(1) + "%"; // normalize to max 0.55
+    const fill = document.getElementById(`${containerId}_${k}_fill`);
+    const val  = document.getElementById(`${containerId}_${k}_val`);
+    if (fill) fill.style.width = fillW;
+    if (val)  val.textContent   = pct;
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  statusBadge.textContent = "Loading…";
+
+  window.deckSystem = new DeckSystem();
+  result = await GameSetup.initialize(trainCanvas);
+  window.gameSetupResult = result;
+
+  bot1 = new TrainBot("player1");
+  bot2 = new TrainBot("player2");
+
+  resetGame();
+
+  statusBadge.textContent = "Ready";
+  startBtn.disabled = false;
+  pauseBtn.disabled = false;
+
+  // Prime the display
+  result.renderer.render();
+  drawHeatmap();
+  updateWeightBars("weightBars",  bot1.weights);
+  updateWeightBars("weightBars2", bot2.weights);
+
+  // Start the loop (but paused)
+  raf = requestAnimationFrame(loop);
+}
+
+// ── Reset between episodes ────────────────────────────────────────────────────
+function resetGame() {
+  const { gameLogic: gl, troopSystem, buildingSystem, strategemSystem,
+          influenceSystem, phaseSystem, resourceSystem } = result;
+
+  // Fresh game state
+  const gs = new GameState();
+  gs.tileSize = Math.floor(Math.min(trainCanvas.width / gs.cols, trainCanvas.height / gs.rows));
+  gs.setGameMode("pvc"); // suppresses DOM game-over overlay
+
+  // Update the global pointer so _spawnHeroes() can find GameLogic
+  window.gameSetupResult.gameState = gs;
+
+  gs.initialize(); // calls deckSystem.resetMatchState() + spawns heroes
+
+  // Assign fresh random decks for training variety
+  window.deckSystem.playerDecks.player1 = window.deckSystem.randomDeck();
+  window.deckSystem.playerDecks.player2 = window.deckSystem.randomDeck();
+
+  // Re-inject into all stateful systems
+  troopSystem.gameState      = gs;
+  buildingSystem.gameState   = gs;
+  strategemSystem.gameState  = gs;
+  influenceSystem.gameState  = gs;
+  phaseSystem.gameState      = gs;
+  resourceSystem.gameState   = gs;
+  result.heroInput.gameState = gs;
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+function loop() {
+  raf = requestAnimationFrame(loop);
+  if (!running) return;
+
+  const { troopSystem, buildingSystem, strategemSystem,
+          influenceSystem, phaseSystem, resourceSystem } = result;
+
+  for (let i = 0; i < speed; i++) {
+    const gs = window.gameSetupResult.gameState;
+
+    if (gs.gameOver) {
+      // Record outcome
+      const winner = gs.winner;
+      bot1.onGameOver(winner);
+      bot2.onGameOver(winner);
+      winHistory.push(winner === "player1" ? 1 : 0);
+      episodeCount++;
+
+      // Update metrics
+      updateMetrics(gs);
+      updateWeightBars("weightBars",  bot1.weights);
+      updateWeightBars("weightBars2", bot2.weights);
+      drawChart();
+
+      resetGame();
+      break; // start fresh on the next animation frame
+    }
+
+    // AI decisions every 3 ticks (0.1s of game time) for perf
+    if (Math.round(gs.matchTime * 30) % 3 === 0) {
+      const gl = result.gameLogic;
+      const ds = window.deckSystem;
+      const ss = result.strategemSystem;
+      lastHeatmap1 = bot1.decide(gs, gl, ds, ss, DT) || [];
+      lastHeatmap2 = bot2.decide(gs, gl, ds, ss, DT) || [];
+    }
+
+    phaseSystem.update(DT);
+    if (!gs.gameOver) {
+      influenceSystem.update(DT);
+      resourceSystem.update(DT);
+      troopSystem.update(DT);
+      buildingSystem.update(DT);
+      strategemSystem.update(DT);
+    }
+  }
+
+  // Always render even when speed is high — render after all ticks
+  const gs = window.gameSetupResult.gameState;
+  result.renderer.render();
+  drawHeatmap();
+  metGameTime.textContent = Math.floor(gs.matchTime) + "s";
+}
+
+// ── Heatmap overlay ───────────────────────────────────────────────────────────
+function drawHeatmap() {
+  const gs = window.gameSetupResult.gameState;
+  const ts = gs.tileSize;
+  hCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+
+  // Draw Q-values: green = positive (good tile), red = negative (bad tile)
+  const draw = (hm, _player) => {
+    for (const { row, col, q, isBest } of hm) {
+      if (q === 0 && !isBest) continue;
+      const alpha = Math.min(0.65, Math.abs(q) * 1.5 + 0.05);
+      hCtx.fillStyle = q >= 0
+        ? `rgba(70,210,70,${alpha})`
+        : `rgba(210,55,55,${alpha})`;
+      hCtx.fillRect(col * ts, row * ts, ts, ts);
+
+      if (isBest) {
+        // Yellow border on the chosen spawn tile
+        hCtx.strokeStyle = "rgba(255,230,0,0.9)";
+        hCtx.lineWidth = 2.5;
+        hCtx.strokeRect(col * ts + 1.5, row * ts + 1.5, ts - 3, ts - 3);
+      }
+    }
+  };
+
+  draw(lastHeatmap1, "player1");
+  draw(lastHeatmap2, "player2");
+}
+
+// ── Win-rate sparkline ────────────────────────────────────────────────────────
+function drawChart() {
+  const W = chartCanvas.width, H = chartCanvas.height;
+  cCtx.clearRect(0, 0, W, H);
+  cCtx.fillStyle = "#111";
+  cCtx.fillRect(0, 0, W, H);
+
+  if (winHistory.length < 2) return;
+
+  const window50 = winHistory.slice(-50);
+  const pts = window50.length;
+  const stepX = W / (pts - 1);
+
+  // Rolling 10-episode average
+  const smooth = window50.map((_, i) => {
+    const slice = window50.slice(Math.max(0, i - 9), i + 1);
+    return slice.reduce((s, v) => s + v, 0) / slice.length;
+  });
+
+  // 50% baseline
+  cCtx.strokeStyle = "#333";
+  cCtx.lineWidth = 1;
+  cCtx.beginPath();
+  cCtx.moveTo(0, H / 2);
+  cCtx.lineTo(W, H / 2);
+  cCtx.stroke();
+
+  // Blue win rate line
+  cCtx.strokeStyle = "#6bb8ff";
+  cCtx.lineWidth = 2;
+  cCtx.beginPath();
+  smooth.forEach((v, i) => {
+    const x = i * stepX, y = H - v * H;
+    i === 0 ? cCtx.moveTo(x, y) : cCtx.lineTo(x, y);
+  });
+  cCtx.stroke();
+
+  // Label
+  cCtx.fillStyle = "#6bb8ff";
+  cCtx.font = "11px Barlow, sans-serif";
+  if (smooth.length) cCtx.fillText((smooth[smooth.length - 1] * 100).toFixed(0) + "%", W - 32, 14);
+}
+
+// ── Metrics text update ───────────────────────────────────────────────────────
+function updateMetrics(gs) {
+  metEpisodes.textContent = episodeCount;
+  const wr1 = bot1.winRate;
+  const wr2 = bot2.winRate;
+  metBlueWR.textContent = wr1 !== null ? (wr1 * 100).toFixed(0) + "%" : "—";
+  metRedWR.textContent  = wr2 !== null ? (wr2 * 100).toFixed(0) + "%" : "—";
+  const w = gs.winner;
+  metLast.textContent = w === "player1" ? "Blue" : w === "player2" ? "Red" : "—";
+  if (metLast.style !== undefined) {
+    metLast.style.color = w === "player1" ? "#6bb8ff" : w === "player2" ? "#ff7777" : "#aaa";
+  }
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+startBtn.addEventListener("click", () => {
+  running = !running;
+  if (running) {
+    startBtn.textContent = "⏹ Stop";
+    startBtn.classList.add("running");
+    pauseBtn.disabled = false;
+    statusBadge.textContent = "Running";
+    statusBadge.className = "running";
+  } else {
+    startBtn.textContent = "▶ Start";
+    startBtn.classList.remove("running");
+    statusBadge.textContent = "Stopped";
+    statusBadge.className = "";
+  }
+});
+
+pauseBtn.addEventListener("click", () => {
+  if (!running) return;
+  running = false;
+  startBtn.textContent = "▶ Resume";
+  startBtn.classList.remove("running");
+  statusBadge.textContent = "Paused";
+  statusBadge.className = "paused";
+});
+
+resetLearningBtn.addEventListener("click", () => {
+  const wasRunning = running;
+  running = false;
+  bot1 = new TrainBot("player1");
+  bot2 = new TrainBot("player2");
+  episodeCount = 0;
+  winHistory = [];
+  lastHeatmap1 = [];
+  lastHeatmap2 = [];
+  resetGame();
+  result.renderer.render();
+  drawHeatmap();
+  updateWeightBars("weightBars",  bot1.weights);
+  updateWeightBars("weightBars2", bot2.weights);
+  cCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+  metEpisodes.textContent = "0";
+  metBlueWR.textContent = "—";
+  metRedWR.textContent = "—";
+  metLast.textContent = "—";
+  statusBadge.textContent = "Reset";
+  statusBadge.className = "";
+  startBtn.textContent = "▶ Start";
+  startBtn.classList.remove("running");
+  if (wasRunning) {
+    running = true;
+    startBtn.textContent = "⏹ Stop";
+    startBtn.classList.add("running");
+    statusBadge.textContent = "Running";
+    statusBadge.className = "running";
+  }
+});
+
+speedSlider.addEventListener("input", () => {
+  const idx = parseInt(speedSlider.value, 10);
+  speed = SPEEDS[idx];
+  speedLabel.textContent = speed + "×";
+});
+// Initialize label
+speedLabel.textContent = SPEEDS[parseInt(speedSlider.value)] + "×";
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init().catch(err => {
+  console.error("Train init failed:", err);
+  statusBadge.textContent = "Error — see console";
+});
+</script>
+</body>
+</html>
