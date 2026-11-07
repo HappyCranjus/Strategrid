@@ -49,6 +49,7 @@ class AIController {
 
     if (ACTIVE_PHASES.has(gs.phase)) {
       this._tickSpawnCampaign(dt);
+      this._tickBuildings(dt);
       this._tickStrategems();
       this._tickHeroAbility();
       this._tickHeroMovement(dt);
@@ -226,27 +227,98 @@ class AIController {
   }
 
   _tickHeroMovement(dt) {
-    const gs = this.gameState;
+    const gs   = this.gameState;
     const hero = this.owner === "player1" ? gs.hero1 : gs.hero2;
     if (!hero || hero.hp <= 0) return;
 
-    const oppOwner = this.owner === "player1" ? "player2" : "player1";
-    const oppHero  = oppOwner === "player1" ? gs.hero1 : gs.hero2;
+    const hpFrac = hero.maxHp ? hero.hp / hero.maxHp : 1;
 
-    // Move toward the opponent hero; fall back to enemy back column.
-    const targetCol = (oppHero && oppHero.hp > 0) ? oppHero.col
-                    : (this.owner === "player1" ? gs.cols - 1 : 0);
-    const targetRow = (oppHero && oppHero.hp > 0) ? oppHero.row : hero.row;
+    // Retreat when critically low on HP — avoids suicidal charges.
+    if (hpFrac < 0.25) {
+      const safeCol = this.owner === "player1" ? 1.5 : gs.cols - 2.5;
+      const dxR = safeCol - hero.col;
+      if (Math.abs(dxR) > 0.5) {
+        const step = (hero.speed || 0) * dt;
+        hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + Math.sign(dxR) * step));
+        hero.target = null;
+      }
+      return;
+    }
 
-    const dxRaw = targetCol - hero.col;
-    const dyRaw = targetRow - hero.row;
-    const len = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
-    if (len < 0.5) return; // close enough
+    // Engage: move toward the nearest visible enemy troop or building.
+    let targetCol = this.owner === "player1" ? gs.cols * 0.65 : gs.cols * 0.35;
+    let targetRow = hero.row;
+    let nearestDist = Infinity;
 
+    for (const t of gs.troops) {
+      if (!t || t.hp <= 0 || t.owner === this.owner || t.invisible) continue;
+      const dx = t.col - hero.col, dy = t.row - hero.row;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearestDist) { nearestDist = d2; targetCol = t.col; targetRow = t.row; }
+    }
+    for (const b of gs.buildings) {
+      if (!b || b.owner === this.owner) continue;
+      const dx = b.col - hero.col, dy = b.row - hero.row;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearestDist) { nearestDist = d2; targetCol = b.col; targetRow = b.row; }
+    }
+
+    const dxRaw = targetCol - hero.col, dyRaw = targetRow - hero.row;
+    const len   = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
+    if (len < 0.5) return;
     const step = (hero.speed || 0) * dt;
     hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + (dxRaw / len) * step));
     hero.row = Math.max(0.5, Math.min(gs.rows - 1.5, hero.row + (dyRaw / len) * step));
-    hero.target = null; // troopSystem re-acquires next frame
+    hero.target = null;
+  }
+
+  _tickBuildings(dt) {
+    const gs = this.gameState;
+    this._buildTimer = (this._buildTimer || 0) - dt;
+    if (this._buildTimer > 0) return;
+    this._buildTimer = 7 + this.rng() * 5; // attempt every ~7-12 game seconds
+
+    const deck = this.deckSystem && this.deckSystem.getPlayerDeck(this.owner);
+    if (!deck?.buildings?.length) return;
+    const gl = this.gameLogic;
+
+    for (const type of deck.buildings) {
+      const def = (gl.buildingTypes || {})[type];
+      if (!def) continue;
+      if ((gs.currentRP[this.owner] || 0) < (def.cost || 0)) continue;
+
+      const tiles = this._buildingCandidates(type);
+      for (const tile of tiles) {
+        if (window.gameActions.placeBuilding(gs, gl, tile.row, tile.col, this.owner, type)) {
+          return; // placed one; wait for next timer
+        }
+      }
+    }
+  }
+
+  _buildingCandidates(type) {
+    const gs      = this.gameState;
+    const midCol  = Math.floor(gs.cols / 2);
+    const isTower = /turret|cannon|mortar|mage/i.test(type);
+    const tiles   = [];
+
+    for (let r = 0; r < gs.rows; r++) {
+      for (let c = 0; c < gs.cols; c++) {
+        if (gs.grid[r][c].owner !== this.owner) continue;
+        if (this.owner === "player1" && (c < 1 || c >= midCol)) continue;
+        if (this.owner === "player2" && (c < midCol || c > gs.cols - 2)) continue;
+        tiles.push({ row: r, col: c });
+      }
+    }
+
+    // Towers: frontline first.  Bunkers/factories: near midline.
+    tiles.sort((a, b) => {
+      if (isTower) return this.owner === "player1" ? b.col - a.col : a.col - b.col;
+      const dA = Math.abs(a.col - midCol), dB = Math.abs(b.col - midCol);
+      return dA - dB;
+    });
+
+    return tiles.slice(0, 10);
   }
 }
 

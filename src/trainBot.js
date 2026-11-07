@@ -142,11 +142,14 @@ class TrainBot {
       }
     }
 
-    // Hero movement toward opponent hero
+    // Hero movement (smart: nearest enemy, retreat when low HP)
     this._moveHero(gs, dt || 1 / 30);
 
     // Hero ability
     if (ss) ss.tryActivateHeroAbility(this.player);
+
+    // Buildings (tower/bunker placement, timer-gated)
+    this._tickBuildings(gs, gl, ds, dt || 1 / 30);
 
     // Strategems
     this._tickStrategems(gs, gl, ds, ss);
@@ -203,12 +206,42 @@ class TrainBot {
   // ── Hero movement ─────────────────────────────────────────────────────────
 
   _moveHero(gs, dt) {
-    const hero    = this.player === "player1" ? gs.hero1 : gs.hero2;
-    const oppHero = this.player === "player1" ? gs.hero2 : gs.hero1;
+    const hero = this.player === "player1" ? gs.hero1 : gs.hero2;
     if (!hero || hero.hp <= 0) return;
 
-    const targetCol = (oppHero && oppHero.hp > 0) ? oppHero.col : (this.player === "player1" ? gs.cols - 1 : 0);
-    const targetRow = (oppHero && oppHero.hp > 0) ? oppHero.row : hero.row;
+    const hpFrac = hero.maxHp ? hero.hp / hero.maxHp : 1;
+
+    // Retreat to safe column when critically low on HP.
+    if (hpFrac < 0.25) {
+      const safeCol = this.player === "player1" ? 1.5 : gs.cols - 2.5;
+      const dxR = safeCol - hero.col;
+      if (Math.abs(dxR) > 0.5) {
+        const step = (hero.speed || 0) * dt;
+        hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + Math.sign(dxR) * step));
+        hero.target = null;
+      }
+      return;
+    }
+
+    // Engage: move toward the nearest enemy troop or building.
+    let targetCol = this.player === "player1" ? gs.cols * 0.65 : gs.cols * 0.35;
+    let targetRow = hero.row;
+    let nearestDist = Infinity;
+
+    for (const t of gs.troops) {
+      if (!t || t.hp <= 0 || t.owner === this.player || t.invisible) continue;
+      const dx = t.col - hero.col, dy = t.row - hero.row;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearestDist) { nearestDist = d2; targetCol = t.col; targetRow = t.row; }
+    }
+    // Also consider enemy buildings as targets.
+    for (const b of gs.buildings) {
+      if (!b || b.owner === this.player) continue;
+      const dx = b.col - hero.col, dy = b.row - hero.row;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearestDist) { nearestDist = d2; targetCol = b.col; targetRow = b.row; }
+    }
+
     const dxR = targetCol - hero.col, dyR = targetRow - hero.row;
     const len = Math.sqrt(dxR * dxR + dyR * dyR);
     if (len < 0.5) return;
@@ -216,6 +249,57 @@ class TrainBot {
     hero.col = Math.max(0.5, Math.min(gs.cols - 1.5, hero.col + (dxR / len) * step));
     hero.row = Math.max(0.5, Math.min(gs.rows - 1.5, hero.row + (dyR / len) * step));
     hero.target = null;
+  }
+
+  // ── Building placement ────────────────────────────────────────────────────
+
+  _tickBuildings(gs, gl, ds, dt) {
+    this._buildTimer = (this._buildTimer || 0) - dt;
+    if (this._buildTimer > 0) return;
+    this._buildTimer = 7 + Math.random() * 5; // attempt every ~7-12 game seconds
+
+    const deck = ds && ds.getPlayerDeck(this.player);
+    if (!deck?.buildings?.length) return;
+
+    for (const type of deck.buildings) {
+      const def = (gl.buildingTypes || {})[type];
+      if (!def) continue;
+      if ((gs.currentRP[this.player] || 0) < (def.cost || 0)) continue;
+
+      // Try several candidate tiles until one is accepted by placeBuilding.
+      const tiles = this._buildingCandidates(gs, type);
+      for (const tile of tiles) {
+        if (window.gameActions.placeBuilding(gs, gl, tile.row, tile.col, this.player, type)) {
+          return; // placed one; wait for next timer
+        }
+      }
+    }
+  }
+
+  _buildingCandidates(gs, type) {
+    const midCol  = Math.floor(gs.cols / 2);
+    const isTower = /turret|cannon|mortar|mage/i.test(type);
+    const tiles   = [];
+
+    for (let r = 0; r < gs.rows; r++) {
+      for (let c = 0; c < gs.cols; c++) {
+        if (gs.grid[r][c].owner !== this.player) continue;
+        // Must be within the allowed building zone (placeBuilding enforces this but
+        // filter early to avoid wasted attempts).
+        if (this.player === "player1" && (c < 1 || c >= midCol)) continue;
+        if (this.player === "player2" && (c < midCol || c > gs.cols - 2)) continue;
+        tiles.push({ row: r, col: c });
+      }
+    }
+
+    // Towers: frontline first.  Bunkers/factories: near midline.
+    tiles.sort((a, b) => {
+      if (isTower) return this.player === "player1" ? b.col - a.col : a.col - b.col;
+      const distA = Math.abs(a.col - midCol), distB = Math.abs(b.col - midCol);
+      return distA - distB;
+    });
+
+    return tiles.slice(0, 10); // try at most 10 tiles
   }
 
   // ── Strategem spam ────────────────────────────────────────────────────────
