@@ -19,52 +19,53 @@ const { NUM_TILES } = require('./actionEncoder');
 const H1 = 128, H2 = 64;
 
 class Network {
-  constructor() {
+  constructor(h1 = H1, h2 = H2) {
+    this.H1 = h1; this.H2 = h2;
     // Weights
-    this.W1 = xavierInit(H1, STATE_SIZE);
-    this.b1 = zeros(H1);
-    this.W2 = xavierInit(H2, H1);
-    this.b2 = zeros(H2);
-    this.Wp = xavierInit(NUM_TILES, H2);
+    this.W1 = xavierInit(h1, STATE_SIZE);
+    this.b1 = zeros(h1);
+    this.W2 = xavierInit(h2, h1);
+    this.b2 = zeros(h2);
+    this.Wp = xavierInit(NUM_TILES, h2);
     this.bp = zeros(NUM_TILES);
-    this.Wv = xavierInit(1, H2);
+    this.Wv = xavierInit(1, h2);
     this.bv = zeros(1);
 
     // Adam moment vectors (m = first, v = second)
     this._initAdam();
 
     // Pre-allocated activation buffers (avoid GC pressure in hot loop)
-    this._h1pre  = zeros(H1);
-    this._h1     = zeros(H1);
-    this._h2pre  = zeros(H2);
-    this._h2     = zeros(H2);
+    this._h1pre  = zeros(h1);
+    this._h1a    = zeros(h1);  // activated h1 (renamed to avoid collision)
+    this._h2pre  = zeros(h2);
+    this._h2a    = zeros(h2);  // activated h2
     this._logits = zeros(NUM_TILES);
     this._policy = zeros(NUM_TILES);
-    this._vpre   = zeros(1); // value head pre-activation (keep separate from _h1pre)
+    this._vpre   = zeros(1);
 
     // Pre-allocated gradient buffers
-    this._dh2    = zeros(H2);
-    this._dh2pre = zeros(H2);
-    this._dh1    = zeros(H1);
-    this._dh1pre = zeros(H1);
+    this._dh2    = zeros(h2);
+    this._dh2pre = zeros(h2);
+    this._dh1    = zeros(h1);
+    this._dh1pre = zeros(h1);
     this._dlogits = zeros(NUM_TILES);
-    this._dW1  = zeros(H1 * STATE_SIZE);
-    this._dW2  = zeros(H2 * H1);
-    this._dWp  = zeros(NUM_TILES * H2);
-    this._dWv  = zeros(H2);   // 1×H2 stored flat
+    this._dW1  = zeros(h1 * STATE_SIZE);
+    this._dW2  = zeros(h2 * h1);
+    this._dWp  = zeros(NUM_TILES * h2);
+    this._dWv  = zeros(h2);
 
-    this._t = 0; // Adam time step
+    this._t = 0;
   }
 
   _initAdam() {
-    const z = (n) => zeros(n);
-    this._mW1 = z(H1*STATE_SIZE); this._vW1 = z(H1*STATE_SIZE);
-    this._mb1 = z(H1);            this._vb1 = z(H1);
-    this._mW2 = z(H2*H1);        this._vW2 = z(H2*H1);
-    this._mb2 = z(H2);            this._vb2 = z(H2);
-    this._mWp = z(NUM_TILES*H2);  this._vWp = z(NUM_TILES*H2);
+    const z = (n) => zeros(n), h1 = this.H1, h2 = this.H2;
+    this._mW1 = z(h1*STATE_SIZE); this._vW1 = z(h1*STATE_SIZE);
+    this._mb1 = z(h1);            this._vb1 = z(h1);
+    this._mW2 = z(h2*h1);        this._vW2 = z(h2*h1);
+    this._mb2 = z(h2);            this._vb2 = z(h2);
+    this._mWp = z(NUM_TILES*h2);  this._vWp = z(NUM_TILES*h2);
     this._mbp = z(NUM_TILES);     this._vbp = z(NUM_TILES);
-    this._mWv = z(H2);            this._vWv = z(H2);
+    this._mWv = z(h2);            this._vWv = z(h2);
     this._mbv = z(1);             this._vbv = z(1);
   }
 
@@ -75,18 +76,19 @@ class Network {
    * Modifies internal activation buffers — do not call concurrently.
    */
   forward(x) {
-    matvec(this.W1, x, H1, STATE_SIZE, this.b1, this._h1pre);
-    this._h1.set(this._h1pre);
-    relu(this._h1);
+    const h1 = this.H1, h2 = this.H2;
+    matvec(this.W1, x, h1, STATE_SIZE, this.b1, this._h1pre);
+    this._h1a.set(this._h1pre);
+    relu(this._h1a);
 
-    matvec(this.W2, this._h1, H2, H1, this.b2, this._h2pre);
-    this._h2.set(this._h2pre);
-    relu(this._h2);
+    matvec(this.W2, this._h1a, h2, h1, this.b2, this._h2pre);
+    this._h2a.set(this._h2pre);
+    relu(this._h2a);
 
-    matvec(this.Wp, this._h2, NUM_TILES, H2, this.bp, this._logits);
+    matvec(this.Wp, this._h2a, NUM_TILES, h2, this.bp, this._logits);
     softmax(this._logits, this._policy);
 
-    matvec(this.Wv, this._h2, 1, H2, this.bv, this._vpre);
+    matvec(this.Wv, this._h2a, 1, h2, this.bv, this._vpre);
     const { v: value, dv: dtanh } = tanhFwd(this._vpre[0]);
 
     return { policy: this._policy, value, logits: this._logits, dtanh };
@@ -113,29 +115,29 @@ class Network {
     // ── Value gradient: 0.5 * d(MSE) / d(value_pre) ─────────────────────────
     const dvalue_pre = 0.5 * 2 * (value - outcome) * dtanh;
 
+    const h1 = this.H1, h2 = this.H2;
+
     // ── Gradient at h2 from both heads ───────────────────────────────────────
     this._dh2.fill(0);
-    tmatvec(this.Wp, this._dlogits, NUM_TILES, H2, this._dh2);
-    // Add value head gradient: Wv.T * dvalue_pre
-    for (let j = 0; j < H2; j++) this._dh2[j] += this.Wv[j] * dvalue_pre;
+    tmatvec(this.Wp, this._dlogits, NUM_TILES, h2, this._dh2);
+    for (let j = 0; j < h2; j++) this._dh2[j] += this.Wv[j] * dvalue_pre;
 
     // ── Through ReLU at h2 ────────────────────────────────────────────────────
     this._dh2pre.set(this._dh2);
     reluBack(this._dh2pre, this._h2pre);
 
     // ── Gradient at h1 ────────────────────────────────────────────────────────
-    tmatvec(this.W2, this._dh2pre, H2, H1, this._dh1);
+    tmatvec(this.W2, this._dh2pre, h2, h1, this._dh1);
 
     // ── Through ReLU at h1 ────────────────────────────────────────────────────
     this._dh1pre.set(this._dh1);
     reluBack(this._dh1pre, this._h1pre);
 
     // ── Compute weight gradients ──────────────────────────────────────────────
-    this._dW1.fill(0);  outerAdd(this._dh1pre, x,       H1,       STATE_SIZE, this._dW1);
-    this._dW2.fill(0);  outerAdd(this._dh2pre, this._h1, H2,       H1,        this._dW2);
-    this._dWp.fill(0);  outerAdd(this._dlogits, this._h2, NUM_TILES, H2,       this._dWp);
-    // Wv gradient: outer([dvalue_pre], h2) stored as flat H2 vector
-    for (let j = 0; j < H2; j++) this._dWv[j] = dvalue_pre * this._h2[j];
+    this._dW1.fill(0);  outerAdd(this._dh1pre, x,        h1,       STATE_SIZE, this._dW1);
+    this._dW2.fill(0);  outerAdd(this._dh2pre, this._h1a, h2,       h1,        this._dW2);
+    this._dWp.fill(0);  outerAdd(this._dlogits, this._h2a, NUM_TILES, h2,       this._dWp);
+    for (let j = 0; j < h2; j++) this._dWv[j] = dvalue_pre * this._h2a[j];
 
     // ── Adam updates ──────────────────────────────────────────────────────────
     const t = this._t;
@@ -178,6 +180,15 @@ class Network {
     this.Wp.set(obj.Wp); this.bp.set(obj.bp);
     this.Wv.set(obj.Wv); this.bv.set(obj.bv);
     this._t = obj.t || 0;
+  }
+
+  /** Create a Network sized to match a previously saved weights object. */
+  static fromSave(obj) {
+    const h1 = Math.round(obj.W1.length / STATE_SIZE);
+    const h2 = Math.round(obj.W2.length / h1);
+    const net = new Network(h1, h2);
+    net.load(obj);
+    return net;
   }
 }
 

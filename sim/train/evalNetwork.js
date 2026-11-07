@@ -28,8 +28,7 @@ if (!fs.existsSync(WEIGHTS_FILE)) {
   console.error(`Weights not found: ${WEIGHTS_FILE}\nRun trainNetwork.js first.`);
   process.exit(1);
 }
-const net = new Network();
-net.load(JSON.parse(fs.readFileSync(WEIGHTS_FILE)));
+const net = Network.fromSave(JSON.parse(fs.readFileSync(WEIGHTS_FILE)));
 console.log(`Loaded weights from ${WEIGHTS_FILE}`);
 
 // ── NNBot decision function ───────────────────────────────────────────────────

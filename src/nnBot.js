@@ -118,10 +118,16 @@ class NNBot {
       this._W2 = new Float32Array(w.W2); this._b2 = new Float32Array(w.b2);
       this._Wp = new Float32Array(w.Wp); this._bp = new Float32Array(w.bp);
       this._Wv = new Float32Array(w.Wv); this._bv = new Float32Array(w.bv);
+      // Detect layer sizes from saved weights
+      const H1_saved = Math.round(w.W1.length / _STATE_SIZE);
+      const H2_saved = Math.round(w.W2.length / H1_saved);
+      this._h1 = new Float32Array(H1_saved);
+      this._h2 = new Float32Array(H2_saved);
+      this._H1 = H1_saved; this._H2 = H2_saved;
       this._loaded = true;
       const params = w.W1.length + w.b1.length + w.W2.length + w.b2.length
                    + w.Wp.length + w.bp.length + w.Wv.length + w.bv.length;
-      console.log(`NNBot loaded (${(params/1000).toFixed(0)}K params from ${url})`);
+      console.log(`NNBot loaded (${(params/1000).toFixed(0)}K params, arch ${H1_saved}×${H2_saved} from ${url})`);
     } catch (e) {
       console.info('NNBot: no weights found, falling back to heuristic AI.', e.message);
     }
@@ -135,9 +141,9 @@ class NNBot {
     if (!this._loaded) return null;
 
     const state = _encodeState(gs, player);
-    _matvec(this._W1, state, 128, _STATE_SIZE, this._b1, this._h1); _relu(this._h1);
-    _matvec(this._W2, this._h1, 64, 128, this._b2, this._h2);       _relu(this._h2);
-    _matvec(this._Wp, this._h2, 288, 64, this._bp, this._logits);
+    _matvec(this._W1, state, this._H1, _STATE_SIZE, this._b1, this._h1); _relu(this._h1);
+    _matvec(this._W2, this._h1, this._H2, this._H1, this._b2, this._h2); _relu(this._h2);
+    _matvec(this._Wp, this._h2, 288, this._H2, this._bp, this._logits);
     _softmax(this._logits, this._policy);
 
     // Build mask: valid spawn tiles for any affordable troop
