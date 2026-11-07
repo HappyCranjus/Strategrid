@@ -266,6 +266,28 @@
 
     <!-- Right: metrics -->
     <div id="train-right">
+      <!-- Live current game stats -->
+      <div class="panel-box">
+        <h3>Current Game</h3>
+        <div style="height:8px;background:#222;border-radius:4px;overflow:hidden;margin-bottom:4px;">
+          <div id="liveTileBlue" style="height:100%;background:#3399ff;width:50%;border-radius:4px 0 0 4px;transition:width 0.25s;float:left;"></div>
+          <div id="liveTileRed"  style="height:100%;background:#ff4444;width:50%;border-radius:0 4px 4px 0;transition:width 0.25s;float:left;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:6px;">
+          <span id="liveTileBlueN" class="blue">—</span>
+          <span style="color:#444">tiles</span>
+          <span id="liveTileRedN" class="red">—</span>
+        </div>
+        <div class="metric-row">
+          <span>Time</span><span id="metGameTime2">0s</span>
+        </div>
+        <div class="metric-row">
+          <span class="blue">Blue troops</span><span id="metP1Troops" class="blue">—</span>
+          <span style="color:#333;font-size:0.7rem;margin:0 4px">|</span>
+          <span class="red">Red troops</span><span id="metP2Troops" class="red">—</span>
+        </div>
+      </div>
+
       <div class="panel-box">
         <h3>Training Progress</h3>
         <div class="metric-row"><span>Episodes</span><span id="metEpisodes">0</span></div>
@@ -296,6 +318,12 @@
       <div class="panel-box" id="weightsPanel2">
         <h3>Red — Learned Weights</h3>
         <div id="weightBars2"></div>
+      </div>
+
+      <!-- Match history log -->
+      <div class="panel-box" style="flex:1;min-height:80px;">
+        <h3>Match History</h3>
+        <div id="matchLog"></div>
       </div>
     </div>
   </div>
@@ -341,6 +369,11 @@ let winHistory  = [];    // 1=blue, 0=red per episode
 let lastHeatmap1 = [];
 let lastHeatmap2 = [];
 let speed = SPEEDS[2];   // default 5x
+
+// ── Visual effects state ──────────────────────────────────────────────────────
+let winAnnounce  = null;   // { winner, bornAt } — canvas flash on game-over
+const spawnFlashes = [];   // { row, col, player, bornAt } — per-troop spawn pulses
+const tCtx = trainCanvas ? trainCanvas.getContext('2d') : null; // for overlay draws
 
 const STORAGE_KEY = "strategrid_training_v1";
 
@@ -573,8 +606,15 @@ function loop() {
     const gs = window.gameSetupResult.gameState;
 
     if (gs.gameOver) {
+      // Brief pause: let the win-announcement flash play before resetting.
+      if (!winAnnounce) {
+        winAnnounce = { winner: gs.winner, bornAt: performance.now() };
+      }
+      if (performance.now() - winAnnounce.bornAt < 420) break; // hold for ~420ms
+
       // Record outcome
       const winner = gs.winner;
+      const gameSecs = Math.round(gs.matchTime);
       bot1.onGameOver(winner);
       bot2.onGameOver(winner);
       winHistory.push(winner === "player1" ? 1 : 0);
@@ -586,6 +626,7 @@ function loop() {
       updateWeightBars("weightBars2", bot2.weights);
       updatePolicyDisplay(bot1, bot2);
       drawChart();
+      appendMatchLog(episodeCount, winner, gameSecs);
 
       // Auto-save every 10 episodes.
       if (episodeCount % 10 === 0) {
@@ -603,6 +644,11 @@ function loop() {
       const ss = result.strategemSystem;
       lastHeatmap1 = bot1.decide(gs, gl, ds, ss, DT) || [];
       lastHeatmap2 = bot2.decide(gs, gl, ds, ss, DT) || [];
+      // Record spawn flashes for the chosen tiles
+      if (bot1.lastBest && bot1.lastBest.kind === 'spawnTroop')
+        spawnFlashes.push({ row: bot1.lastBest.row, col: bot1.lastBest.col, player: 'player1', bornAt: performance.now() });
+      if (bot2.lastBest && bot2.lastBest.kind === 'spawnTroop')
+        spawnFlashes.push({ row: bot2.lastBest.row, col: bot2.lastBest.col, player: 'player2', bornAt: performance.now() });
     }
 
     phaseSystem.update(DT);
@@ -619,6 +665,8 @@ function loop() {
   const gs = window.gameSetupResult.gameState;
   result.renderer.render();
   drawHeatmap();
+  drawWinAnnounce();
+  if (!gs.gameOver) updateLiveGame(gs);
   metGameTime.textContent = Math.floor(gs.matchTime) + "s";
 }
 
@@ -649,6 +697,85 @@ function drawHeatmap() {
 
   draw(lastHeatmap1, "player1");
   draw(lastHeatmap2, "player2");
+
+  // Spawn pulse effects — bright flash when a troop is placed
+  const now = performance.now();
+  for (let i = spawnFlashes.length - 1; i >= 0; i--) {
+    const f   = spawnFlashes[i];
+    const age = (now - f.bornAt) / 500;
+    if (age >= 1) { spawnFlashes.splice(i, 1); continue; }
+    const a = (1 - age) * 0.9;
+    hCtx.fillStyle = f.player === 'player1'
+      ? `rgba(100,210,255,${a})` : `rgba(255,120,100,${a})`;
+    hCtx.fillRect(f.col * ts, f.row * ts, ts, ts);
+    hCtx.strokeStyle = f.player === 'player1'
+      ? `rgba(200,240,255,${a})` : `rgba(255,200,180,${a})`;
+    hCtx.lineWidth = 2;
+    hCtx.strokeRect(f.col * ts + 1, f.row * ts + 1, ts - 2, ts - 2);
+  }
+}
+
+// ── Win announcement overlay ─────────────────────────────────────────────────
+function drawWinAnnounce() {
+  if (!winAnnounce || !tCtx) return;
+  const age   = performance.now() - winAnnounce.bornAt;
+  const alpha = Math.max(0, 1 - age / 1200);
+  if (alpha <= 0) { winAnnounce = null; return; }
+  const isBlue = winAnnounce.winner === 'player1';
+  const W = trainCanvas.width, H = trainCanvas.height;
+  tCtx.fillStyle = isBlue
+    ? `rgba(50,140,255,${(alpha * 0.38).toFixed(3)})`
+    : `rgba(255,65,65,${(alpha * 0.38).toFixed(3)})`;
+  tCtx.fillRect(0, 0, W, H);
+  const fontSize = Math.round(H * 0.09);
+  tCtx.font      = `700 ${fontSize}px Barlow,sans-serif`;
+  tCtx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+  tCtx.textAlign    = 'center';
+  tCtx.textBaseline = 'middle';
+  tCtx.shadowColor = isBlue ? 'rgba(80,160,255,0.8)' : 'rgba(255,80,80,0.8)';
+  tCtx.shadowBlur  = 24;
+  tCtx.fillText(isBlue ? 'BLUE WINS' : 'RED WINS', W / 2, H / 2);
+  tCtx.shadowBlur   = 0;
+  tCtx.textAlign    = 'left';
+  tCtx.textBaseline = 'alphabetic';
+}
+
+// ── Live current-game stats ───────────────────────────────────────────────────
+function updateLiveGame(gs) {
+  let p1t = 0, p2t = 0, p1tr = 0, p2tr = 0;
+  for (let r = 0; r < gs.rows; r++)
+    for (let c = 0; c < gs.cols; c++) {
+      const o = gs.grid[r][c].owner;
+      if (o === 'player1') p1t++; else if (o === 'player2') p2t++;
+    }
+  for (const t of gs.troops) {
+    if (!t || t.hp <= 0 || t.isHero) continue;
+    if (t.owner === 'player1') p1tr++; else p2tr++;
+  }
+  const total = (p1t + p2t) || 1;
+  const el = (id) => document.getElementById(id);
+  el('liveTileBlue').style.width  = (p1t / total * 100).toFixed(1) + '%';
+  el('liveTileRed').style.width   = (p2t / total * 100).toFixed(1) + '%';
+  el('liveTileBlueN').textContent = p1t;
+  el('liveTileRedN').textContent  = p2t;
+  el('metP1Troops').textContent   = p1tr;
+  el('metP2Troops').textContent   = p2tr;
+  el('metGameTime2').textContent  = Math.floor(gs.matchTime) + 's';
+}
+
+// ── Match history log ─────────────────────────────────────────────────────────
+function appendMatchLog(ep, winner, secs) {
+  const log  = document.getElementById('matchLog');
+  if (!log) return;
+  const isBlue = winner === 'player1';
+  const line   = document.createElement('div');
+  line.style.cssText = 'padding:3px 0;border-bottom:1px solid #1a1a1a;';
+  line.innerHTML =
+    `<span style="color:#444">#${ep}</span> ` +
+    `<span style="color:${isBlue ? '#6bb8ff' : '#ff7777'};font-weight:600">${isBlue ? '● Blue' : '● Red'}</span> ` +
+    `<span style="color:#444;font-size:0.72rem">${secs}s</span>`;
+  log.prepend(line);
+  while (log.children.length > 8) log.removeChild(log.lastChild);
 }
 
 // ── Win-rate sparkline ────────────────────────────────────────────────────────
