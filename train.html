@@ -245,6 +245,7 @@
       <div id="train-controls">
         <button class="ctrl-btn" id="startBtn">▶ Start</button>
         <button class="ctrl-btn" id="pauseBtn" disabled>⏸ Pause</button>
+        <button class="ctrl-btn" id="nnModeBtn" title="Use neural network for spawn decisions">🧠 NN Mode</button>
         <button class="ctrl-btn" id="resetLearningBtn">↺ Reset Learning</button>
         <button class="ctrl-btn" id="exportBtn" title="Download trained AI as JSON file">⬇ Export AI</button>
         <button class="ctrl-btn" id="importBtn" title="Load trained AI from JSON file">⬆ Import AI</button>
@@ -256,10 +257,15 @@
           <input type="range" id="speedSlider" min="0" max="5" value="2">
           <span id="speedLabel">5×</span>
         </div>
-        <div class="legend-row">
+        <div class="legend-row" id="legendQ">
           <span><span class="legend-dot" style="background:rgba(80,220,80,0.7)"></span>Good tile</span>
           <span><span class="legend-dot" style="background:rgba(220,60,60,0.7)"></span>Bad tile</span>
-          <span><span class="legend-dot" style="background:rgba(255,230,0,0.9); border:2px solid #fff;"></span>Chosen</span>
+          <span><span class="legend-dot" style="background:rgba(255,230,0,0.9);border:2px solid #fff;"></span>Chosen</span>
+        </div>
+        <div class="legend-row" id="legendNN" style="display:none">
+          <span><span class="legend-dot" style="background:rgba(255,210,50,0.85)"></span>High prob</span>
+          <span><span class="legend-dot" style="background:rgba(120,60,220,0.5)"></span>Low prob</span>
+          <span style="color:#c060ff;font-size:0.75rem">🧠 Neural Network</span>
         </div>
       </div>
     </div>
@@ -352,6 +358,7 @@
 <script src="src/gameLoop.js?v=9"></script>
 <script src="src/gameSetup.js?v=6"></script>
 <script src="src/heroPolicies.js?v=1"></script>
+<script src="src/nnBot.js?v=2"></script>
 <script src="src/trainBot.js?v=4"></script>
 
 <script>
@@ -374,6 +381,11 @@ let speed = SPEEDS[2];   // default 5x
 let winAnnounce  = null;   // { winner, bornAt } — canvas flash on game-over
 const spawnFlashes = [];   // { row, col, player, bornAt } — per-troop spawn pulses
 const tCtx = trainCanvas ? trainCanvas.getContext('2d') : null; // for overlay draws
+
+// ── Neural Network mode ───────────────────────────────────────────────────────
+let nnMode    = false;
+let nnPolicy1 = null; // Float32Array(288) — last P1 NN policy (probability per tile)
+let nnPolicy2 = null; // Float32Array(288) — last P2 NN policy
 
 const STORAGE_KEY = "strategrid_training_v1";
 
@@ -642,13 +654,51 @@ function loop() {
       const gl = result.gameLogic;
       const ds = window.deckSystem;
       const ss = result.strategemSystem;
-      lastHeatmap1 = bot1.decide(gs, gl, ds, ss, DT) || [];
-      lastHeatmap2 = bot2.decide(gs, gl, ds, ss, DT) || [];
-      // Record spawn flashes for the chosen tiles
-      if (bot1.lastBest && bot1.lastBest.kind === 'spawnTroop')
-        spawnFlashes.push({ row: bot1.lastBest.row, col: bot1.lastBest.col, player: 'player1', bornAt: performance.now() });
-      if (bot2.lastBest && bot2.lastBest.kind === 'spawnTroop')
-        spawnFlashes.push({ row: bot2.lastBest.row, col: bot2.lastBest.col, player: 'player2', bornAt: performance.now() });
+
+      if (nnMode && window.nnBot && window.nnBot._loaded) {
+        // ── Neural Network mode: NNBot picks spawn tiles ──────────────────────
+        for (const [player, bot] of [['player1', bot1], ['player2', bot2]]) {
+          const tile = window.nnBot.pickSpawnTile(gs, player, gl, ds);
+
+          // Capture and de-mirror the policy probabilities for the heatmap
+          const policySnap = window.nnBot._policy.slice();
+          if (player === 'player1') nnPolicy1 = policySnap;
+          else                       nnPolicy2 = policySnap;
+
+          // Try to spawn the highest-cost affordable troop at the chosen tile
+          if (tile) {
+            const deck = ds.getPlayerDeck(player);
+            if (deck?.troops) {
+              let best = null, bestCost = -1;
+              for (const t of deck.troops) {
+                const def = (gl.troopTypes || {})[t];
+                if (!def || (gs.currentRP[player] || 0) < (def.cost || 0)) continue;
+                const e = window.gameActions.checkSpawnLegality(gs, gl, tile.col, tile.row, player, t);
+                if (e.zoneOK && e.affordOK && (def.cost || 0) > bestCost) { bestCost = def.cost; best = t; }
+              }
+              if (best) {
+                const ok = window.gameActions.spawnTroop(gs, gl, tile.row, tile.col, player, best);
+                if (ok) spawnFlashes.push({ row: tile.row, col: tile.col, player, bornAt: performance.now() });
+              }
+            }
+          }
+          // Hero, buildings, strategems still from TrainBot heuristics
+          bot._moveHero(gs, DT);
+          if (ss) ss.tryActivateHeroAbility(player);
+          bot._tickBuildings(gs, gl, ds, DT);
+          bot._tickStrategems(gs, gl, ds, ss);
+        }
+        lastHeatmap1 = [];
+        lastHeatmap2 = [];
+      } else {
+        // ── Q-learning mode: TrainBot decides everything ───────────────────────
+        lastHeatmap1 = bot1.decide(gs, gl, ds, ss, DT) || [];
+        lastHeatmap2 = bot2.decide(gs, gl, ds, ss, DT) || [];
+        if (bot1.lastBest && bot1.lastBest.kind === 'spawnTroop')
+          spawnFlashes.push({ row: bot1.lastBest.row, col: bot1.lastBest.col, player: 'player1', bornAt: performance.now() });
+        if (bot2.lastBest && bot2.lastBest.kind === 'spawnTroop')
+          spawnFlashes.push({ row: bot2.lastBest.row, col: bot2.lastBest.col, player: 'player2', bornAt: performance.now() });
+      }
     }
 
     phaseSystem.update(DT);
@@ -695,8 +745,42 @@ function drawHeatmap() {
     }
   };
 
-  draw(lastHeatmap1, "player1");
-  draw(lastHeatmap2, "player2");
+  if (nnMode && (nnPolicy1 || nnPolicy2)) {
+    // ── Neural Network probability heatmap ──────────────────────────────────
+    // Purple (low prob) → yellow/gold (high prob) gradient
+    for (const [policy, player] of [[nnPolicy1, 'player1'], [nnPolicy2, 'player2']]) {
+      if (!policy) continue;
+      let maxP = 0;
+      for (let i = 0; i < 288; i++) if (policy[i] > maxP) maxP = policy[i];
+      if (maxP <= 0) continue;
+      const COLS = gs.cols;
+      for (let idx = 0; idx < 288; idx++) {
+        const p = policy[idx] / maxP; // 0–1 relative probability
+        if (p < 0.08) continue;       // skip near-zero tiles
+        const row = Math.floor(idx / COLS);
+        const c   = idx % COLS;
+        // De-mirror column axis: P2's policy was encoded with flipped columns
+        const col = player === 'player2' ? (COLS - 1 - c) : c;
+        // Interpolate purple → gold: low = (120,60,220), high = (255,210,50)
+        const r = Math.round(120 + p * 135);
+        const g = Math.round(60  + p * 150);
+        const b = Math.round(220 - p * 170);
+        hCtx.fillStyle = `rgba(${r},${g},${b},${(p * 0.72).toFixed(3)})`;
+        hCtx.fillRect(col * ts, row * ts, ts, ts);
+      }
+    }
+    // Label on canvas
+    if (tCtx) {
+      tCtx.font      = '700 13px Barlow,sans-serif';
+      tCtx.fillStyle = 'rgba(200,100,255,0.85)';
+      tCtx.textAlign = 'right';
+      tCtx.fillText('🧠 Neural Network', trainCanvas.width - 8, 20);
+      tCtx.textAlign = 'left';
+    }
+  } else {
+    draw(lastHeatmap1, "player1");
+    draw(lastHeatmap2, "player2");
+  }
 
   // Spawn pulse effects — bright flash when a troop is placed
   const now = performance.now();
@@ -936,6 +1020,21 @@ document.getElementById("importFile").addEventListener("change", (e) => {
   };
   reader.readAsText(file);
   e.target.value = "";
+});
+
+document.getElementById("nnModeBtn").addEventListener("click", () => {
+  const nn = window.nnBot;
+  if (!nn || !nn._loaded) {
+    alert("Neural network weights not loaded yet.\n\nRun:\n  node sim/train/trainNetwork.js\n\nthen reload this page.");
+    return;
+  }
+  nnMode = !nnMode;
+  document.getElementById("nnModeBtn").classList.toggle("active", nnMode);
+  document.getElementById("legendQ").style.display  = nnMode ? "none"  : "";
+  document.getElementById("legendNN").style.display = nnMode ? ""      : "none";
+  statusBadge.textContent = nnMode ? "🧠 NN Mode" : (running ? "Running" : "Ready");
+  statusBadge.className   = nnMode ? "running" : (running ? "running" : "");
+  if (!nnMode) { nnPolicy1 = null; nnPolicy2 = null; }
 });
 
 document.getElementById("clearSaveBtn").addEventListener("click", () => {
