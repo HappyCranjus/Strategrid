@@ -380,7 +380,8 @@ let speed = SPEEDS[2];   // default 5x
 // ── Visual effects state ──────────────────────────────────────────────────────
 let winAnnounce  = null;   // { winner, bornAt } — canvas flash on game-over
 const spawnFlashes = [];   // { row, col, player, bornAt } — per-troop spawn pulses
-const tCtx = trainCanvas ? trainCanvas.getContext('2d') : null; // for overlay draws
+// tCtx initialized below after trainCanvas is declared
+let tCtx = null;
 
 // ── Neural Network mode ───────────────────────────────────────────────────────
 let nnMode    = false;
@@ -439,6 +440,7 @@ const DT = 1 / 30;
 const trainCanvas   = document.getElementById("trainCanvas");
 const heatmapCanvas = document.getElementById("heatmapCanvas");
 const hCtx          = heatmapCanvas.getContext("2d");
+tCtx = trainCanvas.getContext("2d"); // for win-flash overlay
 const chartCanvas   = document.getElementById("chartCanvas");
 const cCtx          = chartCanvas.getContext("2d");
 
