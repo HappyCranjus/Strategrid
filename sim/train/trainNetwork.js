@@ -57,7 +57,7 @@ function shuffle(arr) {
 // ── Train ─────────────────────────────────────────────────────────────────────
 
 const net = new Network();
-console.log(`Network: ${STATE_SIZE} → 256 → 128 → [288 policy, 1 value]`);
+console.log(`Network: ${STATE_SIZE} → ${net.H1} → ${net.H2} → [288 policy, 1 value]`);
 console.log(`Epochs: ${EPOCHS}, LR: ${LR}, Examples: ${N}\n`);
 
 const t0 = Date.now();
