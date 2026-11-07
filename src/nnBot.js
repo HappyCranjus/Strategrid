@@ -100,8 +100,8 @@ class NNBot {
     this._W1 = this._b1 = this._W2 = this._b2 = null;
     this._Wp = this._bp = this._Wv = this._bv = null;
     // Pre-alloc buffers
-    this._h1 = new Float32Array(256);
-    this._h2 = new Float32Array(128);
+    this._h1 = new Float32Array(128);
+    this._h2 = new Float32Array(64);
     this._logits = new Float32Array(288);
     this._policy = new Float32Array(288);
   }
@@ -135,9 +135,9 @@ class NNBot {
     if (!this._loaded) return null;
 
     const state = _encodeState(gs, player);
-    _matvec(this._W1, state, 256, _STATE_SIZE, this._b1, this._h1); _relu(this._h1);
-    _matvec(this._W2, this._h1, 128, 256, this._b2, this._h2);       _relu(this._h2);
-    _matvec(this._Wp, this._h2, 288, 128, this._bp, this._logits);
+    _matvec(this._W1, state, 128, _STATE_SIZE, this._b1, this._h1); _relu(this._h1);
+    _matvec(this._W2, this._h1, 64, 128, this._b2, this._h2);       _relu(this._h2);
+    _matvec(this._Wp, this._h2, 288, 64, this._bp, this._logits);
     _softmax(this._logits, this._policy);
 
     // Build mask: valid spawn tiles for any affordable troop

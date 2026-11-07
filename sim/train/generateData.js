@@ -23,22 +23,34 @@ const path = require('path');
 require('../loader');
 const hg = require('../headlessGame');
 const { RandomBot } = require('../randomBot');
+const { MctsBot }   = require('../mctsBot');
 const { encodeState, tileToIndex, STATE_SIZE, ROWS, COLS } = require('./stateEncoder');
 
-const NUM_GAMES  = parseInt(process.argv[2]) || 200;
-const OUT_FILE   = process.argv[3] || path.join(__dirname, 'data.bin');
-const MAX_TICKS  = 20_000;
+const NUM_GAMES   = parseInt(process.argv[2]) || 200;
+const OUT_FILE    = process.argv[3] || path.join(__dirname, 'data.bin');
+// MCTS budget per decision in ms. 0 = use RandomBot (fast but weak signal).
+// 5ms gives ~3 iterations of frontline-biased search — much better than random.
+const MCTS_BUDGET = parseInt(process.argv[4]) || 5;
+const MAX_TICKS   = 20_000;
 
 // ── Run games ────────────────────────────────────────────────────────────────
 
 const examples = []; // {state: Float32Array, tileIdx: int, player: string}[]
 let totalGames = 0, noWinner = 0;
 
-process.stdout.write(`Generating data: ${NUM_GAMES} games\n`);
+process.stdout.write(`Generating data: ${NUM_GAMES} games, MCTS budget ${MCTS_BUDGET}ms\n`);
 const t0 = Date.now();
 
 for (let g = 0; g < NUM_GAMES; g++) {
   const game = hg.createGame({}, g + 1);
+  // Always use RandomBot for non-spawn heuristic actions (hero, strategems).
+  // For spawn decisions only, use MctsBot (better frontline bias) or RandomBot.
+  const spawnBot1 = MCTS_BUDGET > 0
+    ? new MctsBot({ budgetMs: MCTS_BUDGET, kActions: 8, rolloutDepth: 3 })
+    : new RandomBot();
+  const spawnBot2 = MCTS_BUDGET > 0
+    ? new MctsBot({ budgetMs: MCTS_BUDGET, kActions: 8, rolloutDepth: 3 })
+    : new RandomBot();
   const bot1 = new RandomBot();
   const bot2 = new RandomBot();
 
@@ -49,8 +61,12 @@ for (let g = 0; g < NUM_GAMES; g++) {
   while (!hg.isTerminal(game) && ticks < MAX_TICKS) {
     const gs = game.gs;
 
-    const p1actions = bot1.decide(game, 'player1');
-    const p2actions = bot2.decide(game, 'player2');
+    // Call the smarter spawn bot every 10 ticks to keep data gen fast.
+    // On other ticks fall back to RandomBot for the heuristic actions.
+    // At 30 Hz, every-10-ticks = decisions every ~0.33s of game time.
+    const useSpawnBot = (ticks % 10 === 0);
+    const p1actions = useSpawnBot ? spawnBot1.decide(game, 'player1') : bot1.decide(game, 'player1');
+    const p2actions = useSpawnBot ? spawnBot2.decide(game, 'player2') : bot2.decide(game, 'player2');
 
     // Record spawn decisions BEFORE they're applied
     for (const a of p1actions) {

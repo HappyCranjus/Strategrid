@@ -16,7 +16,7 @@ const { matvec, tmatvec, outerAdd, relu, reluBack, softmax, tanhFwd, xavierInit,
 const { STATE_SIZE } = require('./stateEncoder');
 const { NUM_TILES } = require('./actionEncoder');
 
-const H1 = 256, H2 = 128;
+const H1 = 128, H2 = 64;
 
 class Network {
   constructor() {
